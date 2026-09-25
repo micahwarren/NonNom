@@ -3,7 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import {
   ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle, Platform, KeyboardAvoidingView,
 } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, Easing, FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing, FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useThemeStyles, useTheme, ThemeColors, fontSize, radius, shadow, spacing, touch } from "./theme";
@@ -139,14 +139,14 @@ export function StatCard({ label, value, sub, icon, color, testID, style }: { la
 }
 
 // --- States -----------------------------------------------------------------
-export function EmptyState({ icon = "leaf-outline", title, message, ctaTitle, onCta, compact }: { icon?: IconName; title: string; message?: string; ctaTitle?: string; onCta?: () => void; compact?: boolean }) {
+export function EmptyState({ icon = "leaf-outline", title, message, ctaTitle, onCta, ctaTestID, compact }: { icon?: IconName; title: string; message?: string; ctaTitle?: string; onCta?: () => void; ctaTestID?: string; compact?: boolean }) {
   const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <View style={[s.state, compact && { paddingVertical: spacing.lg }]}>
       <View style={s.stateIcon}><Icon name={icon} size={28} color={colors.brandPrimary} /></View>
       <Text style={s.stateTitle}>{title}</Text>
       {message && <Text style={s.stateMsg}>{message}</Text>}
-      {ctaTitle && onCta && <Button title={ctaTitle} onPress={onCta} size="sm" style={{ marginTop: spacing.sm, paddingHorizontal: spacing.lg }} />}
+      {ctaTitle && onCta && <Button title={ctaTitle} onPress={onCta} testID={ctaTestID} size="sm" style={{ minHeight: touch.min, marginTop: spacing.sm, paddingHorizontal: spacing.lg }} />}
     </View>
   );
 }
@@ -170,9 +170,11 @@ export function Skeleton({ height = 16, width = "100%", radius: r = radius.sm, s
   const { colors } = useTheme();
   const o = useSharedValue(0.5);
   useEffect(() => {
-    const loop = () => { o.value = withTiming(o.value > 0.7 ? 0.5 : 1, { duration: 700 }, () => loop()); };
-    loop();
-  }, []);
+    // withTiming callbacks execute on the native UI thread. Calling a regular
+    // JS function from one crashes there, even though it works in web preview.
+    o.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
+    return () => cancelAnimation(o);
+  }, [o]);
   const st = useAnimatedStyle(() => ({ opacity: o.value }));
   return <Animated.View style={[{ height, width, borderRadius: r, backgroundColor: colors.skeleton }, st, style]} />;
 }

@@ -7,11 +7,13 @@ import { api, FoodDay, FoodEntry, Meal } from "@/src/api";
 import { Card, EmptyState, ErrorState, Icon, IconButton, LoadingState, MEALS } from "@/src/ui";
 import { EditFoodSheet, FoodRow } from "@/src/food-components";
 import { dayName, todayISO } from "@/src/units";
+import { useAddSheet } from "@/src/add-sheet";
 
 export default function LogScreen() {
   const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { open: openAddSheet } = useAddSheet();
   const params = useLocalSearchParams<{ date?: string }>();
   const date = params.date ?? todayISO();
   const isToday = date === todayISO();
@@ -24,7 +26,7 @@ export default function LogScreen() {
   const load = useCallback(async () => {
     setErr(null);
     try { setDay(await api.foodDay(isToday ? undefined : date)); } catch (e: any) { setErr(e.message); }
-  }, [date]);
+  }, [date, isToday]);
   useFocusEffect(useCallback(() => { load().finally(() => setLoading(false)); }, [load]));
 
   const goAdd = (meal: Meal) => router.push({ pathname: "/search", params: { meal, date } } as any);
@@ -52,7 +54,7 @@ export default function LogScreen() {
         {loading ? <LoadingState rows={3} /> : err ? <ErrorState message={err} onRetry={load} /> : (
           <>
             {day && day.count === 0 && (
-              <EmptyState icon="restaurant-outline" title="Nothing logged yet" message={isToday ? "Log your first meal and Buddy will start tracking your day." : "No entries were logged on this day."} ctaTitle={isToday ? "Log your first meal" : undefined} onCta={() => goAdd("breakfast")} compact />
+              <EmptyState icon="restaurant-outline" title="Nothing logged yet" message={isToday ? "Log your first meal and Buddy will start tracking your day." : "No entries were logged on this day."} ctaTitle={isToday ? "Log your first meal" : undefined} onCta={openAddSheet} ctaTestID="log-first-meal" compact />
             )}
             {MEALS.map(m => {
               const items = day?.meals[m.value] ?? [];

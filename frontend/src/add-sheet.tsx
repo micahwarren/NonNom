@@ -43,7 +43,7 @@ export function AddSheetProvider({ children }: { children: React.ReactNode }) {
   return (
     <AddSheetCtx.Provider value={value}>
       {children}
-      <Sheet visible={visible} onClose={close} title={waterMode ? "Add water" : "What would you like to log?"} scroll={false}>
+      <Sheet visible={visible} onClose={close} title={waterMode ? "Add water" : "What would you like to log?"} testID="add-log-sheet" scroll={false}>
         {waterMode ? (
           <View style={styles.waterRow}>
             {[250, 500, 750].map(ml => (

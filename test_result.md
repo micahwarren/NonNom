@@ -104,6 +104,34 @@
 
 user_problem_statement: "Simplify Buddy and Log; one cup water; advice info popup; horizontal daily history; fix subscription layout and Edit Goal; new outfits, funny accessories and shaped Noms with responsive expressions; optional dark mode."
 frontend:
+  - task: "First meal CTA reuses global Add menu and Buddy headline punctuation"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "testing"
+        working: true
+        comment: "iteration_4.json: shared menu contents match for both entry points, dismissal/non-mutating navigation work, CTA hidden on populated/historical log; all 8 headline branches verified by pure tests. Browser-only empty-day fixture used, no account data mutated. Main enlarged CTA to >=44px after feedback."
+      - agent: "main"
+        working: "NA"
+        comment: "Log empty-state CTA now uses useAddSheet.open, exactly like center +; testID log-first-meal and shared add-log-sheet. All eight Buddy headline branches punctuated in nutrition.py. TSC passes; Buddy neutral punctuation visually confirmed. Test account now has meals, so do not delete data to force empty state. Verify with another existing empty account or a test-only read-response override."
+  - task: "Expo Go force quits on launch"
+    implemented: true
+    working: false
+    needs_retesting: true
+    stuck_count: 2
+    priority: "high"
+    status_history:
+      - agent: "user"
+        working: false
+        comment: "Expo Go force quits every time the app opens; repeated report, no error screen."
+      - agent: "main"
+        working: "NA"
+        comment: "Patched unsafe Skeleton worklet-to-JS recursion with withRepeat + cancelAnimation. Deferred theme hydration until root mount, removed Appearance native override, enabled LogBox. Device resolution not confirmed."
+      - agent: "testing"
+        working: "NA"
+        comment: "iteration_3.json: TypeScript and web startup/loading/theme persistence pass. Native export blocked by ARM/x86 Hermes mismatch. Physical-device force quit remains unverified."
   - task: "Buddy and Log simplification, horizontal history"
     implemented: true
     working: true
@@ -145,9 +173,11 @@ backend:
         working: "NA"
         comment: "Catalog defaults support old users; shape/shoes validated by equip endpoint with existing free/premium checks. No auth credentials changed."
 test_plan:
-  current_focus: ["Edit Goal saves and cancels correctly", "Dark mode persists and reaches all screens", "Water cup add/undo", "Horizontal history opens correct log", "Cosmetics persist and expressions differ"]
+  current_focus: ["First meal CTA reuses global Add menu and Buddy headline punctuation", "Phone crash confirmation remains pending separately"]
   test_all: false
 agent_communication:
+  - agent: "main"
+    message: "Do not mark crash resolved from web tests. Candidate fix validated for code and browser regressions; user must retry actual phone. Native libs match Expo bundled versions. Test report 3 switch checked-state issue is automation-only (use existing dark-mode-row-subtitle); no unrelated UI changes for crash patch. No auth or user data modified."
   - agent: "main"
     message: "Final verification complete. Backend 10/10; user flows pass. Resolved duplicate profile navigation via dismissTo, removed disabled wrapper around switches, added radio selected indicators and appearance state subtitle. Screenshot retests passed dark-mode/storage, goal save/cancel, cosmetic persistence across new session. Demo goal currently Maintain after tester edits; equipment/light mode restored. See iteration_2_followup.json."
   - agent: "main"

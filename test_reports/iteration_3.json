@@ -1,0 +1,66 @@
+{
+  "summary": "Frontend-only regression completed on public preview for native-crash follow-up scope. Skeleton animation code is now native-safe in source (withRepeat + cancelAnimation cleanup, no unsafe JS callback in completion worklet). Web mobile smoke (390x844) passed for login/home/progress/profile navigation and no blank startup screen observed. Dark mode applies and persisted across reload when verified by subtitle text, then restored to light. Native bundle verification is BLOCKED in this environment: both iOS/Android expo export fail at Hermes bytecode step due architecture mismatch (aarch64 runner executing x86_64 hermesc). Physical Expo Go force-quit on device remains unresolved here and needs user confirmation on real iOS/Android devices.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Dark mode switch automation state",
+        "issue": "`dark-mode-toggle` checked-state is unreliable via Playwright `is_checked()` on web; subtitle text is reliable. This can create false negatives in automated persistence checks.",
+        "testID": "dark-mode-toggle",
+        "priority": "medium"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Native export validation (iOS/Android)",
+        "issue": "`yarn expo export --platform ios/android` fails: Hermes compiler binary cannot execute in this container (`Exec format error` / export step failure). Native bundle generation cannot be validated here.",
+        "affected_testIDs": []
+      },
+      {
+        "flow": "Cold start auth/session check",
+        "issue": "Console shows expected 401s before login on protected API calls; app recovers after login. No red screen seen.",
+        "affected_testIDs": ["login-email-input", "login-submit-button", "home-scroll"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "global",
+        "issues": [
+          "RN web still logs deprecated `shadow*` style warning (`Use boxShadow`) during preview runs."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/artifacts_iter3/home_loaded.jpeg",
+    "/app/test_reports/artifacts_iter3/theme_retest_final.jpeg",
+    "/app/test_reports/artifacts_iter3/failure_state.jpeg",
+    "/app/test_reports/artifacts_iter3/darkmode_subtitle_failure.jpeg"
+  ],
+  "action_items": [
+    "Run physical-device verification on real iOS and Android Expo Go/dev build to confirm FORCE QUIT is resolved (web preview cannot prove this).",
+    "For CI/export in ARM containers, use architecture-compatible Hermes compiler path or x86_64 runner; current environment cannot execute bundled x86_64 hermesc.",
+    "Optional testability improvement: expose deterministic dark-mode state attribute (e.g., data-checked) for robust web automation without relying on switch internals."
+  ],
+  "critical_code_review_comments": [
+    "`src/ui.tsx` Skeleton implementation is now native-safe: no worklet completion callback calling JS directly; animation loop uses `withRepeat(withTiming(...), -1, true)` plus `cancelAnimation` cleanup.",
+    "`src/theme.ts` hydration is idempotent (`hydration ??=`), storage-backed, and no module-level Appearance override exists; aligns with startup stability goal.",
+    "`app/_layout.tsx` initializes theme in `useEffect` and keeps logging enabled (`LogBox.ignoreAllLogs(false)`), improving startup diagnostics instead of suppressing errors."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_3.json"
+  ],
+  "success_rate": {
+    "backend": "N/A (not requested)",
+    "frontend": "~80% (web smoke and code-level checks passed; native export/device-crash confirmation blocked)"
+  },
+  "seed_data_creation": "None. Used existing demo@nomnom.app account only; no profile/goal/equipment/food/water/account mutations performed beyond temporary dark toggle restored to light.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Do not claim physical crash fixed from browser results alone. Re-run on real iOS/Android device, opening app repeatedly from cold start. If testing dark-mode persistence, assert `dark-mode-row-subtitle` text (`On/Off`) instead of `dark-mode-toggle.is_checked()`.",
+  "rca_of_issue": "Native export failure RCA: container architecture is `aarch64`, while Expo export invokes `node_modules/hermes-compiler/hermesc/linux64-bin/hermesc` (x86_64 ELF). Direct execution returns `cannot execute binary file: Exec format error`, causing Hermes bytecode generation failure for both iOS and Android export. This blocks native bundle validation in this environment and is not evidence of app runtime logic failure. Physical Expo Go force-quit remains unresolved pending real-device retest."
+}

@@ -62,9 +62,23 @@
 - QA note: demo account's goal is currently Maintain weight after the tester's goal-editor scenario; exact prior profile snapshot was not retained. Equipment restored to defaults and light theme restored in test browser. Starting-weight anchor remains preserved; no existing food history was removed.
 
 ## Current backlog
-- P0: No open functional blockers for this request. Physical-device native visual verification remains recommended; testing used mobile-sized Expo preview.
+### Latest small updates
+- Log empty-state “Log your first meal” opens the existing global Add sheet, identical to the center + (same eight choices). Per-meal Add Food and historical log behavior are unchanged.
+- All Buddy status headlines now end in `!` or `...`, including “Let's finish strong!” and “A little low on protein...”. Shared backend copy keeps headline and advice-sheet title consistent.
+- Verified by `test_reports/iteration_4.json`: menu parity/dismissal/non-mutating navigation and populated/historical CTA conditions pass; pure-function tests cover all eight headline branches. No user data changed. EmptyState CTA now has a minimum 44-point touch target.
+
+- P0: User reports repeated Expo Go force-quit at launch. Candidate patch applied; physical-device confirmation is REQUIRED before marking resolved (see below).
 - P1: Previously deferred social polish and remote push setup, unchanged by this request.
 - P2: Additional seasonal Nom accessories; provider-verified subscription webhooks.
+
+## Expo Go launch crash follow-up
+- User reported launch force-quit repeatedly, without native crash text. iOS Metro logs show bundles downloading and JS initialization, not the fatal-device stack. No confirmed device model/OS yet.
+- Concrete code defect found: `Skeleton` called a regular JS `loop()` from a Reanimated `withTiming` completion callback (UI thread). Replaced with built-in `withRepeat(withTiming(...), -1, true)` and `cancelAnimation` on unmount. Browser runtime did not expose this native thread-boundary defect.
+- Theme hydration now begins once in the mounted root effect via `initializeTheme()`, with no `Appearance.setColorScheme` native override at import time or on toggle. React tokens and explicit StatusBar still provide persisted dark mode.
+- Re-enabled LogBox diagnostics rather than suppressing all errors. No auth changes, native dependency changes, version downgrades, protected config edits, or user-data edits made for this patch.
+- Diagnosis cautions: RevenueCat Expo Go Browser Mode is an intended fallback, NOT proof it caused a crash. `transformOrigin` is supported in current RN and was NOT removed based on an incorrect diagnostic assertion. No device crash stack yet proves the specific force-quit cause.
+- Verification: TypeScript passes; modified file lints have no errors (pre-existing hook dependency warnings). Test report `test_reports/iteration_3.json`: browser login/navigation, slowed loading for multiple skeleton cycles, theme switch and reload persistence pass. Light preference restored. Native bytecode exports blocked by ARM runner/x86 Hermes compiler mismatch; do not interpret as app runtime failure or successful native launch test.
+- Next: restart Expo and ask user to retry current QR. If still force-quitting, obtain device/OS/Expo Go version and native crash log. Keep crash open until physical-device launch is confirmed.
 
 - Frontend: Expo 57, expo-router, reanimated, @react-native-vector-icons/ionicons, react-native-purchases, expo-camera, expo-image-picker, expo-sharing
 - Backend: FastAPI split into server.py / core.py / nutrition.py / routes_auth.py / routes_food.py / routes_tracking.py (legacy monolith in backend/legacy/)

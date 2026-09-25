@@ -14,9 +14,11 @@ import { AuthProvider, useAuth } from "@/src/auth-context";
 import { initializeRevenueCat, SubscriptionProvider } from "@/src/revenuecat";
 import { ToastProvider } from "@/src/ui";
 import { AddSheetProvider } from "@/src/add-sheet";
-import { useTheme } from "@/src/theme";
+import { initializeTheme, useTheme } from "@/src/theme";
 
-LogBox.ignoreAllLogs(true);
+// Keep native errors visible while investigating startup issues; browser
+// bundling alone cannot verify an Expo Go launch on a physical device.
+LogBox.ignoreAllLogs(false);
 
 try {
   initializeRevenueCat();
@@ -58,6 +60,7 @@ function RouterGate() {
 export default function RootLayout() {
   const { colors, scheme, ready } = useTheme();
   useFonts({ Ionicons: require("@react-native-vector-icons/ionicons/fonts/Ionicons.ttf") });
+  useEffect(() => { void initializeTheme(); }, []);
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.surface }} />;
   return (
     <ErrorBoundary>

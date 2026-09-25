@@ -1,6 +1,6 @@
 // NomNom design tokens. Warm, playful, tactile light theme.
 import { useMemo, useSyncExternalStore } from "react";
-import { Appearance, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ColorScheme = "light" | "dark";
@@ -79,17 +79,21 @@ const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const notify = () => listeners.forEach(listener => listener());
 
-export const themeReady = AsyncStorage.getItem(THEME_KEY).then(saved => {
-  if (saved === "dark" || saved === "light") currentScheme = saved;
-  Appearance.setColorScheme?.(currentScheme);
-}).catch(() => {}).finally(() => { ready = true; notify(); });
+let hydration: Promise<void> | null = null;
+export function initializeTheme(): Promise<void> {
+  // Called after the root mounts, not during module evaluation. Theme colors
+  // and StatusBar are controlled by React; no native Appearance override needed.
+  hydration ??= AsyncStorage.getItem(THEME_KEY).then(saved => {
+    if (saved === "dark" || saved === "light") currentScheme = saved;
+  }).catch(() => {}).finally(() => { ready = true; notify(); });
+  return hydration;
+}
 
 export async function setColorScheme(scheme: ColorScheme | null) {
   const next = scheme ?? defaultScheme;
   // Persist before publishing so failed writes never pretend the choice was saved.
   await AsyncStorage.setItem(THEME_KEY, next);
   currentScheme = next;
-  Appearance.setColorScheme?.(next);
   notify();
 }
 

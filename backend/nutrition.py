@@ -124,28 +124,28 @@ def buddy_state(summary: dict, t: dict, hour: int) -> dict:
     score = summary["nutrition_score"]
 
     if entries == 0:
-        state, headline = "neutral", "Ready when you are"
+        state, headline = "neutral", "Ready when you are..."
         msg = "Log your first meal and Buddy will start tracking your day."
     elif abs(cal_left) <= t["calories"] * 0.1 and protein_left <= 0:
-        state, headline = "celebrating", "Nailed it"
+        state, headline = "celebrating", "Nailed it!"
         msg = "You hit your calorie range and your protein target. Great day."
     elif water_pct < 0.4 and hour >= 14:
-        state, headline = "needs_hydration", "Time for water"
+        state, headline = "needs_hydration", "Time for water!"
         msg = f"You're at {int(water_pct * 100)}% of your water goal. A glass now would help."
     elif protein_left > 40 and hour >= 15:
-        state, headline = "needs_protein", "A little low on protein"
+        state, headline = "needs_protein", "A little low on protein..."
         msg = f"You still need {int(protein_left)}g of protein. A high-protein snack would fit well."
     elif score >= 80:
-        state, headline = "excellent", "Doing great"
+        state, headline = "excellent", "Doing great!"
         msg = _left_sentence(cal_left, protein_left)
     elif score >= 60:
-        state, headline = "doing_well", "Solid day so far"
+        state, headline = "doing_well", "Solid day so far!"
         msg = _left_sentence(cal_left, protein_left)
     elif score >= 40:
-        state, headline = "neutral", "Almost there"
+        state, headline = "neutral", "Almost there..."
         msg = _left_sentence(cal_left, protein_left)
     else:
-        state, headline = "tired", "Let's finish strong"
+        state, headline = "tired", "Let's finish strong!"
         msg = _left_sentence(cal_left, protein_left)
     return {"state": state, "headline": headline, "message": msg}
 
