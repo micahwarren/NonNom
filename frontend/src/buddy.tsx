@@ -25,9 +25,23 @@ const BACKGROUNDS: Record<string, string[]> = {
 
 export const DEFAULT_EQUIPPED: Equipped = { skin: "skin_classic", hat: "hat_none", glasses: "glasses_none", accessory: "acc_none", outfit: "outfit_none", background: "bg_cream" };
 
-type Props = { state?: BuddyState; equipped?: Partial<Equipped>; size?: number; animate?: boolean; showBackground?: boolean; testID?: string };
+type Props = { state?: BuddyState; equipped?: Partial<Equipped>; size?: number; animate?: boolean; showBackground?: boolean; level?: number; testID?: string };
 
-export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate = true, showBackground = true, testID }: Props) {
+/** Level evolution tiers — Buddy looks cooler as the level (one per logged day) climbs. */
+export function levelTier(level: number) {
+  return {
+    glow: Math.min(0.55, Math.max(0, level - 1) * 0.045),          // soft halo grows every level
+    sparkles: Math.min(8, Math.floor(level / 3)),                    // orbiting sparkles from level 3
+    aura: level >= 7,                                                // coral aura ring
+    goldAura: level >= 14,                                           // gold second ring
+    star: level >= 10,                                               // star badge
+    sheen: level >= 5,                                               // glossy highlight
+    legendary: level >= 30,                                          // gold shimmer skin ring
+  };
+}
+
+export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate = true, showBackground = true, level = 1, testID }: Props) {
+  const tier = levelTier(level);
   const eq = { ...DEFAULT_EQUIPPED, ...(equipped ?? {}) };
   const u = size / 100; // unit
   const skin = SKINS[eq.skin] ?? SKINS.skin_classic;
@@ -64,6 +78,15 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
       {eq.background === "bg_confetti" && showBackground && [0, 1, 2, 3, 4].map(i => (
         <View key={i} style={{ position: "absolute", width: 6 * u, height: 6 * u, borderRadius: 2 * u, backgroundColor: [colors.brandPrimary, colors.carbs, colors.water, colors.protein, colors.success][i], top: (12 + i * 15) * u, left: (10 + ((i * 37) % 80)) * u, transform: [{ rotate: `${i * 30}deg` }] }} />
       ))}
+      {/* level evolution: halo, aura rings, orbiting sparkles */}
+      {tier.glow > 0 && <View style={{ position: "absolute", width: 78 * u, height: 78 * u, borderRadius: 39 * u, backgroundColor: tier.legendary ? colors.premium : colors.brandPrimary, opacity: tier.glow, top: 8 * u }} />}
+      {tier.aura && <View style={{ position: "absolute", width: 86 * u, height: 86 * u, borderRadius: 43 * u, borderWidth: 2 * u, borderColor: colors.brandPrimary, opacity: 0.55, top: 4 * u }} />}
+      {tier.goldAura && <View style={{ position: "absolute", width: 94 * u, height: 94 * u, borderRadius: 47 * u, borderWidth: 1.5 * u, borderColor: colors.premium, opacity: 0.7, top: 0 }} />}
+      {Array.from({ length: tier.sparkles }).map((_, i) => {
+        const a = (i / Math.max(tier.sparkles, 1)) * Math.PI * 2 - Math.PI / 2;
+        return <View key={`lv${i}`} style={{ position: "absolute", left: 50 * u + Math.cos(a) * 44 * u - 5 * u, top: 50 * u + Math.sin(a) * 44 * u - 5 * u }}><Icon name="sparkles" size={(8 + (i % 2) * 3) * u} color={tier.legendary || i % 3 === 2 ? colors.premium : colors.carbs} /></View>;
+      })}
+      {tier.star && <View style={{ position: "absolute", top: 4 * u, right: 6 * u, width: 18 * u, height: 18 * u, borderRadius: 9 * u, backgroundColor: colors.premium, alignItems: "center", justifyContent: "center" }}><Icon name="star" size={11 * u} color={WHITE} /></View>}
       {state === "celebrating" && [0, 1, 2].map(i => (
         <Animated.View key={i} style={{ position: "absolute", top: (6 + i * 8) * u, left: (12 + i * 34) * u }}><Icon name="sparkles" size={10 * u} color={colors.carbs} /></Animated.View>
       ))}
@@ -71,6 +94,8 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
         {/* body */}
         <View style={{ width: 64 * u, height: 60 * u, borderRadius: 32 * u, backgroundColor: skin.body, alignItems: "center", overflow: "visible", ...styles.bodyShadow }}>
           <Outfit id={eq.outfit} u={u} />
+          {tier.sheen && <View style={{ position: "absolute", top: 6 * u, left: 12 * u, width: 16 * u, height: 8 * u, borderRadius: 8 * u, backgroundColor: WHITE, opacity: 0.45, transform: [{ rotate: "-20deg" }] }} />}
+          {tier.legendary && <View style={{ position: "absolute", width: 64 * u, height: 60 * u, borderRadius: 32 * u, borderWidth: 2.5 * u, borderColor: colors.premium }} />}
           {/* eyes */}
           <View style={{ flexDirection: "row", gap: 16 * u, marginTop: 20 * u }}>
             {[0, 1].map(i => (

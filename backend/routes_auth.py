@@ -6,8 +6,8 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from core import db, current_user, issue_token, password_hash, now_utc, tz_dep, ai_usage_today
-from nutrition import (DEFAULT_TARGETS, compute_targets, user_targets, equipped_for, effective_streak)
+from core import db, current_user, issue_token, password_hash, now_utc, tz_dep, ai_usage_today, local_today
+from nutrition import (DEFAULT_TARGETS, compute_targets, user_targets, equipped_for, effective_streak, freeze_status)
 
 router = APIRouter()
 
@@ -21,6 +21,7 @@ class SignupIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=60)
+    invite_code: Optional[str] = Field(default=None, max_length=24)
 
 
 class LoginIn(BaseModel):
@@ -92,6 +93,9 @@ def public_user(doc: dict, tz: int = 0) -> dict:
         "achievements": [{"id": a["id"], "unlocked_at": a["unlocked_at"].isoformat() if isinstance(a["unlocked_at"], datetime) else a["unlocked_at"]} for a in doc.get("achievements") or []],
         "notifications": {**DEFAULT_NOTIFICATIONS, **(doc.get("notifications") or {})},
         "privacy": {**DEFAULT_PRIVACY, **(doc.get("privacy") or {})},
+        "targets_rationale": doc.get("targets_rationale") or [],
+        "streak_freeze": freeze_status(doc, tz),
+        "level": int(doc.get("level") or 1), "leveled_today": doc.get("last_level_up_day") == local_today(tz).isoformat(),
         "created_at": doc["created_at"].isoformat() if isinstance(doc.get("created_at"), datetime) else None,
     }
 
@@ -104,6 +108,9 @@ async def signup(body: SignupIn, tz: int = Depends(tz_dep)):
     doc = new_user_doc(email, body.password, body.name.strip())
     r = await db().users.insert_one(doc)
     doc["_id"] = r.inserted_id
+    if body.invite_code:
+        from routes_social import redeem_invite
+        await redeem_invite(doc, body.invite_code.strip().upper())
     return {"access_token": issue_token(str(r.inserted_id)), "token_type": "bearer", "user": public_user(doc, tz)}
 
 
@@ -155,7 +162,8 @@ async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depend
 async def onboarding(body: OnboardingIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     prof = {**(user.get("profile") or {}), **body.profile.model_dump(exclude_none=True)}
     t = compute_targets(prof)
-    updates = {"profile": prof, "targets": t, "onboarding_complete": True,
+    rationale = t.pop("rationale", [])
+    updates = {"profile": prof, "targets": t, "targets_rationale": rationale, "onboarding_complete": True,
                "daily_calorie_goal": t["calories"], "daily_water_goal_ml": t["water_ml"]}
     if body.name:
         updates["name"] = body.name.strip()[:60]

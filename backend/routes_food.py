@@ -31,7 +31,7 @@ class FoodIn(BaseModel):
     serving_label: Optional[str] = Field(default=None, max_length=80)
     quantity: float = Field(default=1, gt=0, le=100)
     meal: Optional[Meal] = None
-    source: Literal["manual", "photo", "barcode", "search", "describe"] = "manual"
+    source: Literal["manual", "photo", "barcode", "search", "describe", "saved"] = "manual"
     data_source: Literal["database", "ai_estimate", "user"] = "user"
     barcode: Optional[str] = None
     provider: Optional[str] = None

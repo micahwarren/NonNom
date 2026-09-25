@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator,
 } from "react-native";
-import { Link } from "expo-router";
+import { Link, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/src/auth-context";
 import { colors, spacing, radius } from "@/src/theme";
@@ -12,6 +12,8 @@ import { BuddyAvatar } from "@/src/buddy";
 export default function Signup() {
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
+  const { ref } = useLocalSearchParams<{ ref?: string }>();
+  const [invite, setInvite] = useState(typeof ref === "string" ? ref.toUpperCase() : "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +22,7 @@ export default function Signup() {
 
   async function submit() {
     setErr(null); setBusy(true);
-    try { await signUp(email.trim(), password, name.trim()); }
+    try { await signUp(email.trim(), password, name.trim(), invite.trim() || undefined); }
     catch (e: any) { setErr(e.message ?? "Signup failed"); }
     finally { setBusy(false); }
   }
@@ -48,6 +50,10 @@ export default function Signup() {
           <TextInput testID="signup-password-input" value={password} onChangeText={setPassword}
             style={styles.input} secureTextEntry placeholder="At least 6 characters"
             placeholderTextColor={colors.muted} />
+        </View>
+        <View style={styles.field}>
+          <Text style={styles.label}>Invite code <Text style={{ color: colors.muted }}>(optional)</Text></Text>
+          <TextInput testID="signup-invite-input" value={invite} onChangeText={setInvite} style={styles.input} autoCapitalize="characters" autoCorrect={false} placeholder="From a friend" placeholderTextColor={colors.muted} />
         </View>
 
         {err && <Text style={styles.err} testID="signup-error">{err}</Text>}

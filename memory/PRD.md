@@ -29,9 +29,19 @@
 - RevenueCat real purchases: store products + credentials (see /app/memory/revenuecat.md). Test Store works in preview.
 - Legal: in-app placeholder copy; set EXPO_PUBLIC_TERMS_URL / EXPO_PUBLIC_PRIVACY_URL / EXPO_PUBLIC_SUPPORT_EMAIL.
 
+### Added in session 3 (June 2026)
+- Buddy levels: +1 level per logged day (`users.level`, `last_level_up_day`); BuddyAvatar evolves by tier (glow → sparkles → sheen → aura → star badge → gold aura → legendary at 30)
+- Home decluttered: date + friends + streak header (no greeting), centered Buddy w/ Level pill, single calories card with inline macros, compact water row
+- Streak Freeze: one per ISO week, auto-applies for a single missed day (`touch_streak`); status in summary + streak sheet
+- Evidence-based targets (Mifflin-St Jeor, ISSN protein 1.6–2.0 g/kg, IOM AMDR fat 30% / carbs ≥130 g, fiber 14 g/1000 kcal, EFSA water) with per-user `targets_rationale` shown in plan reveal ("How we calculated this")
+- Feed Me recipes now include measured ingredients (`ingredients[{item, amount}]`, `servings`) + Save → `saved_meals` (GET/POST/DELETE, POST /{id}/log) + `/saved` screen (Add sheet + Profile)
+- Photo memories: FoodRow thumbnails via `/files/{path}?token=` (token query supported for <Image>)
+- Meal reminders: `src/reminders.ts` local scheduled notifications (expo-notifications) synced from prefs; permission contract w/ Open Settings; web unsupported (message shown)
+- Social (`routes_social.py`): username search, friend request/accept/remove/block, invite codes + referral records (auto-friend on signup w/ code), privacy-aware auto posts (goal/protein/hydration/streak/achievement/cosmetic, deduped per day), paginated feed, reactions (high_five/nice/fire, toggle), side-by-side Buddies. `/friends` screen (Feed · Friends · Buddies · Invite); signup accepts `?ref=CODE`.
+
 ### Not implemented (next session)
-- Phase 7 Social (friends, feed, reactions, invites/referrals) — privacy toggles + usernames already exist
-- Push notification delivery (preferences stored only)
+- Remote push notifications (friend activity / achievements need server push; local reminders are on-device only)
+- Referral rewards (architecture ready: `referrals.reward_granted`)
 - RevenueCat webhook server verification (playbook keeps entitlement client-side; backend mirror is trust-on-sync)
 - Speech-to-text (uses OS keyboard dictation)
 

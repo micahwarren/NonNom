@@ -7,9 +7,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from core import (db, current_user, tz_dep, oid, now_utc, local_today, local_now, day_bounds, to_local_day,
+from core import (db, current_user, bearer, tz_dep, oid, now_utc, local_today, local_now, day_bounds, to_local_day,
                   ai_gate, ai_record, ai_json, get_object_sync, logger)
-from nutrition import (build_day_summary, user_targets, effective_streak, check_achievements, ACHIEVEMENTS,
+from nutrition import (build_day_summary, user_targets, effective_streak, freeze_status, check_achievements, ACHIEVEMENTS,
                        COSMETICS, COSMETIC_BY_ID, DEFAULT_EQUIPPED, cosmetic_available, equipped_for, SCORE_EXPLANATION)
 
 router = APIRouter()
@@ -100,6 +100,9 @@ async def log_exercise(body: ExerciseIn, user=Depends(current_user)):
 async def summary_today(user=Depends(current_user), tz: int = Depends(tz_dep)):
     s = await build_day_summary(user, local_today(tz), tz)
     s["streak_days"] = effective_streak(user, tz)
+    s["streak_freeze"] = freeze_status(user, tz)
+    s["level"] = int(user.get("level") or 1)
+    s["leveled_today"] = user.get("last_level_up_day") == local_today(tz).isoformat()
     s["score_explanation"] = SCORE_EXPLANATION
     return s
 
@@ -228,9 +231,19 @@ def _report_headline(a: dict) -> str:
 FEED_SYSTEM = (
     "You are a practical nutrition assistant. Given what the user has left for today, suggest 3 realistic meals or snacks that fit. "
     "Respond ONLY with JSON: {\"suggestions\": [{\"name\": str, \"description\": str (<=18 words), \"reason\": str (<=20 words, reference the remaining targets), "
-    "\"calories\": int, \"protein_g\": number, \"carbs_g\": number, \"fat_g\": number, "
-    "\"recipe\": [str, str, ...] (3-6 short steps)}]}. Respect dietary preferences and allergies strictly. No medical claims."
+    "\"calories\": int, \"protein_g\": number, \"carbs_g\": number, \"fat_g\": number, \"servings\": int (usually 1), "
+    "\"ingredients\": [{\"item\": str (ingredient name ONLY, e.g. 'cooked chicken breast' — never repeat the amount here), \"amount\": str (exact measurement with units, e.g. '6 oz (170 g)', '1 cup (185 g)', '1 tbsp (15 ml)')}] (3-10 items), "
+    "\"recipe\": [str, str, ...] (3-6 short steps that reference the measured amounts)}]}. "
+    "Calories and macros must be consistent with the listed ingredient amounts (use USDA-typical values; 4 kcal/g protein & carbs, 9 kcal/g fat). "
+    "Respect dietary preferences and allergies strictly. No medical claims."
 )
+
+
+def _clean_ingredient(g: dict) -> dict:
+    item, amount = str(g.get("item", "")).strip(), str(g.get("amount", "")).strip()
+    if amount and item.lower().startswith(amount.lower()):
+        item = item[len(amount):].strip(" ,-–")
+    return {"item": (item or str(g.get("item", "")))[:80], "amount": amount[:60]}
 
 
 class FeedMeIn(BaseModel):
@@ -268,9 +281,76 @@ async def feed_me(body: FeedMeIn, user=Depends(current_user), tz: int = Depends(
         sugg.append({"name": str(it["name"])[:80], "description": str(it.get("description") or "")[:160], "reason": str(it.get("reason") or "")[:160],
                      "calories": max(0, int(float(it.get("calories") or 0))), "protein_g": round(float(it.get("protein_g") or 0), 1),
                      "carbs_g": round(float(it.get("carbs_g") or 0), 1), "fat_g": round(float(it.get("fat_g") or 0), 1),
+                     "servings": max(1, int(it.get("servings") or 1)),
+                     "ingredients": [_clean_ingredient(g) for g in (it.get("ingredients") or []) if isinstance(g, dict) and g.get("item")][:12],
                      "recipe": [str(x)[:200] for x in (it.get("recipe") or [])][:8]})
     await ai_record(user, "meal_recommendation", "ok", {"n": len(sugg)})
     return {"remaining": left, "suggestions": sugg, "data_source": "ai_estimate", "restaurants_available": False}
+
+
+# --- saved meals (favorite Feed Me suggestions, one-tap re-log) --------------
+class SavedMealIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = ""
+    calories: int = Field(ge=0, le=5000)
+    protein_g: float = Field(ge=0, le=500)
+    carbs_g: float = Field(ge=0, le=1000)
+    fat_g: float = Field(ge=0, le=500)
+    servings: int = 1
+    ingredients: list[dict] = []
+    recipe: list[str] = []
+
+
+def _saved_out(d: dict) -> dict:
+    return {"id": str(d["_id"]), "name": d["name"], "description": d.get("description", ""), "calories": d["calories"],
+            "protein_g": d["protein_g"], "carbs_g": d["carbs_g"], "fat_g": d["fat_g"], "servings": d.get("servings", 1),
+            "ingredients": d.get("ingredients", []), "recipe": d.get("recipe", []), "times_logged": d.get("times_logged", 0),
+            "created_at": d["created_at"].isoformat()}
+
+
+@router.get("/saved-meals")
+async def saved_meals(user=Depends(current_user)):
+    docs = await db().saved_meals.find({"user_id": user["_id"]}).sort("created_at", -1).to_list(100)
+    return {"items": [_saved_out(d) for d in docs]}
+
+
+@router.post("/saved-meals", status_code=201)
+async def save_meal(body: SavedMealIn, user=Depends(current_user)):
+    if await db().saved_meals.count_documents({"user_id": user["_id"]}) >= 100:
+        raise HTTPException(400, "You can save up to 100 meals. Remove one to add another.")
+    doc = {**body.model_dump(), "user_id": user["_id"], "created_at": now_utc(), "times_logged": 0}
+    doc["ingredients"] = [{"item": str(g.get("item", ""))[:80], "amount": str(g.get("amount", ""))[:60]} for g in body.ingredients][:12]
+    r = await db().saved_meals.insert_one(doc)
+    doc["_id"] = r.inserted_id
+    return _saved_out(doc)
+
+
+@router.delete("/saved-meals/{meal_id}")
+async def delete_saved(meal_id: str, user=Depends(current_user)):
+    r = await db().saved_meals.delete_one({"_id": oid(meal_id), "user_id": user["_id"]})
+    if not r.deleted_count:
+        raise HTTPException(404, "Saved meal not found")
+    return {"deleted": True}
+
+
+class LogSavedIn(BaseModel):
+    meal: Optional[Literal["breakfast", "lunch", "dinner", "snacks"]] = None
+
+
+@router.post("/saved-meals/{meal_id}/log", status_code=201)
+async def log_saved(meal_id: str, body: LogSavedIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
+    d = await db().saved_meals.find_one({"_id": oid(meal_id), "user_id": user["_id"]})
+    if not d:
+        raise HTTPException(404, "Saved meal not found")
+    from routes_food import FoodIn, _doc_from, food_out, _after_log
+    item = FoodIn(name=d["name"], calories=d["calories"], protein_g=d["protein_g"], carbs_g=d["carbs_g"], fat_g=d["fat_g"],
+                  serving_label="1 serving", quantity=1, source="saved", data_source="ai_estimate")
+    doc = _doc_from(item, user, tz, body.meal)
+    r = await db().food_logs.insert_one(doc)
+    doc["_id"] = r.inserted_id
+    await db().saved_meals.update_one({"_id": d["_id"]}, {"$inc": {"times_logged": 1}})
+    unlocked = await _after_log(user, tz)
+    return {"entry": food_out(doc, tz), "unlocked": unlocked}
 
 
 # --- Buddy cosmetics + achievements -----------------------------------------
@@ -317,8 +397,15 @@ async def analytics_events(body: EventsIn, user=Depends(current_user)):
 
 
 # --- files -------------------------------------------------------------------
+async def user_from_token_or_header(token: Optional[str] = Query(default=None), creds=Depends(bearer)):
+    if creds is None and token:
+        from fastapi.security import HTTPAuthorizationCredentials
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+    return await current_user(creds)
+
+
 @router.get("/files/{path:path}")
-async def get_file(path: str, user=Depends(current_user)):
+async def get_file(path: str, user=Depends(user_from_token_or_header)):
     doc = await db().food_logs.find_one({"image_path": path, "user_id": user["_id"]})
     if not doc and f"/uploads/{user['_id']}/" not in path:
         raise HTTPException(404, "Not found")

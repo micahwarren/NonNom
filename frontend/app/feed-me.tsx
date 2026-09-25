@@ -21,6 +21,13 @@ export default function FeedMe() {
   const [meal, setMeal] = useState<Meal>("lunch");
   const [busy, setBusy] = useState(false);
   const [seen, setSeen] = useState<string[]>([]);
+  const [saved, setSaved] = useState<string[]>([]);
+
+  async function saveSuggestion(s: Suggestion) {
+    if (saved.includes(s.name)) { toast.show("Already saved", { icon: "bookmark" }); return; }
+    try { await api.saveMeal(s); setSaved(x => [...x, s.name]); track("meal_saved"); toast.show("Saved to your meals", { icon: "bookmark", actionTitle: "View", onAction: () => router.push("/saved") }); }
+    catch (e: any) { toast.show(e.message ?? "Couldn't save", { icon: "alert-circle" }); }
+  }
 
   async function load(exclude: string[] = []) {
     setLoading(true); setError(null);
@@ -61,7 +68,7 @@ export default function FeedMe() {
           </View>
         ) : error ? (
           <Card>{error.status === 402
-            ? <ErrorState title="Free limit reached" message={error.msg} onRetry={() => router.push("/paywall")} secondaryTitle="Search foods" onSecondary={() => router.replace("/search")} />
+            ? <ErrorState title="Free limit reached" message={error.msg} retryTitle="Try Premium" onRetry={() => router.push("/paywall")} secondaryTitle="Search foods" onSecondary={() => router.replace("/search")} />
             : <ErrorState title="Buddy is stumped" message={error.msg} onRetry={() => load()} />}</Card>
         ) : (
           <>
@@ -76,7 +83,8 @@ export default function FeedMe() {
                 <View style={styles.reason}><Icon name="checkmark-circle" size={14} color={colors.success} /><Text style={styles.reasonText}>{s.reason}</Text></View>
                 <View style={{ flexDirection: "row", gap: spacing.sm }}>
                   <Button title="Log this" size="sm" onPress={() => setLogging(s)} style={{ flex: 1 }} testID={`log-suggestion-${i}`} />
-                  <Button title="Show recipe" size="sm" variant="secondary" onPress={() => setRecipe(s)} style={{ flex: 1 }} />
+                  <Button title="Recipe" size="sm" variant="secondary" onPress={() => setRecipe(s)} style={{ flex: 1 }} testID={`recipe-${i}`} />
+                  <Button title="" icon={saved.includes(s.name) ? "bookmark" : "bookmark-outline"} size="sm" variant="secondary" onPress={() => saveSuggestion(s)} testID={`save-suggestion-${i}`} accessibilityLabel="Save meal" />
                 </View>
               </Card>
             ))}
@@ -87,8 +95,11 @@ export default function FeedMe() {
       </ScrollView>
 
       <Sheet visible={!!recipe} onClose={() => setRecipe(null)} title={recipe?.name}>
-        {recipe?.recipe.map((step, i) => <View key={i} style={styles.step}><Text style={styles.stepNum}>{i + 1}</Text><Text style={styles.stepText}>{step}</Text></View>)}
-        <Button title="Log this meal" onPress={() => { setLogging(recipe); setRecipe(null); }} style={{ marginTop: spacing.sm }} />
+        <RecipeBody s={recipe} />
+        <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
+          <Button title="Log this meal" onPress={() => { setLogging(recipe); setRecipe(null); }} style={{ flex: 1 }} />
+          <Button title="Save" icon="bookmark-outline" variant="secondary" onPress={() => { if (recipe) { saveSuggestion(recipe); setRecipe(null); } }} />
+        </View>
       </Sheet>
       <Sheet visible={!!logging} onClose={() => setLogging(null)} title={`Log ${logging?.name ?? ""}`}>
         <Text style={styles.desc}>{logging?.calories} kcal · estimated</Text>
@@ -104,7 +115,30 @@ function Big({ v, l, c = colors.onSurface }: { v: string; l: string; c?: string 
   return <View><Text style={[styles.big, { color: c }]}>{v}</Text><Text style={styles.bigL}>{l}</Text></View>;
 }
 
+export function RecipeBody({ s }: { s: Suggestion | null }) {
+  if (!s) return null;
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {!!s.ingredients?.length && (
+        <View style={{ gap: 6 }}>
+          <Text style={styles.secLabel}>Ingredients{s.servings && s.servings > 1 ? ` · ${s.servings} servings` : ""}</Text>
+          {s.ingredients.map((g, i) => (
+            <View key={i} style={styles.ingRow}><Text style={styles.ingAmount}>{g.amount}</Text><Text style={styles.ingItem}>{g.item}</Text></View>
+          ))}
+        </View>
+      )}
+      <Text style={[styles.secLabel, { marginTop: 4 }]}>Steps</Text>
+      {s.recipe.map((step, i) => <View key={i} style={styles.step}><Text style={styles.stepNum}>{i + 1}</Text><Text style={styles.stepText}>{step}</Text></View>)}
+      <Text style={styles.note}>Estimated {s.calories} kcal · P {Math.round(s.protein_g)}g · C {Math.round(s.carbs_g)}g · F {Math.round(s.fat_g)}g per serving</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  secLabel: { fontSize: fontSize.xs, fontWeight: "800", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
+  ingRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+  ingAmount: { width: 120, fontSize: fontSize.sm, fontWeight: "800", color: colors.onSurface },
+  ingItem: { flex: 1, fontSize: fontSize.sm, color: colors.textSecondary },
   left: { backgroundColor: colors.surfaceInverse, borderColor: colors.surfaceInverse, gap: spacing.sm },
   leftLabel: { fontSize: fontSize.xs, fontWeight: "800", color: colors.onSurfaceInverse, opacity: 0.7, textTransform: "uppercase", letterSpacing: 0.5 },
   big: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurfaceInverse },

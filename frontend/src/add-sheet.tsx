@@ -18,6 +18,7 @@ const ACTIONS: { key: string; title: string; sub: string; icon: IconName; route?
   { key: "water", title: "Add Water", sub: "Quick +250 / +500 / +750 ml", icon: "water", color: colors.water },
   { key: "weight", title: "Log Weight", sub: "Track your trend", icon: "scale", route: "/weight", color: colors.fat },
   { key: "exercise", title: "Log Exercise", sub: "Activity and calories burned", icon: "walk", route: "/exercise", color: colors.success },
+  { key: "saved", title: "Saved Meals", sub: "Re-log a favorite in one tap", icon: "bookmark", route: "/saved", color: colors.premium },
 ];
 
 export function AddSheetProvider({ children }: { children: React.ReactNode }) {

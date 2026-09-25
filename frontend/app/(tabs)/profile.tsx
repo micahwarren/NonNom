@@ -2,10 +2,10 @@ import React, { useState } from "react";
 import { Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
 import { colors, fontSize, radius, spacing } from "@/src/theme";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
+import { ensureReminderPermission, openNotificationSettings, PermissionResult, remindersSupported, syncReminders } from "@/src/reminders";
 import { useSubscription } from "@/src/revenuecat";
 import { BuddyAvatar } from "@/src/buddy";
 import { Button, Card, Field, Icon, PremiumBadge, Row, SectionTitle, Sheet, useToast } from "@/src/ui";
@@ -43,17 +43,22 @@ export default function Profile() {
     setBusy(true);
     try { setUser(await api.updateMe({ name: name.trim(), username: username.trim() || undefined })); toast.show("Saved"); setSheet(null); } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } finally { setBusy(false); }
   }
+  const [permState, setPermState] = useState<PermissionResult | null>(null);
   async function toggle(kind: "notifications" | "privacy", key: string, v: boolean) {
     if (!user) return;
+    if (kind === "notifications" && v && key !== "achievements") {
+      const perm = await ensureReminderPermission();
+      setPermState(perm);
+      if (perm === "blocked" || perm === "denied") return; // UI shows why + Open Settings
+    }
     const next = { ...user[kind], [key]: v };
     setUser({ ...user, [kind]: next });
-    try { kind === "notifications" ? await api.updateNotifications({ [key]: v }) : await api.updatePrivacy({ [key]: v }); } catch { refresh(); }
+    try {
+      if (kind === "notifications") { await api.updateNotifications({ [key]: v }); await syncReminders(next as Record<string, boolean>); }
+      else await api.updatePrivacy({ [key]: v });
+    } catch { refresh(); }
   }
   async function setUnits(u: "imperial" | "metric") { setUser(await api.updateMe({ profile: { units: u } })); }
-  async function share() {
-    const msg = `My NomNom Buddy is on a ${user?.streak_days ?? 0}-day streak! 🔥`;
-    try { if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(msg); else toast.show("Sharing isn't available on this device"); } catch {}
-  }
   async function deleteAccount() {
     if (deleteText.trim().toUpperCase() !== "DELETE") return;
     setBusy(true);
@@ -93,7 +98,9 @@ export default function Profile() {
         <Card style={{ padding: 0 }}>
           <Row icon="color-palette-outline" title="Customize Buddy" onPress={() => router.push("/customize")} testID="row-customize" />
           <Row icon="trophy-outline" title="Achievements" onPress={() => router.push("/achievements")} />
-          <Row icon="share-social-outline" title="Share my Buddy" subtitle="Friends and social feed are coming next" onPress={share} />
+          <Row icon="people-outline" title="Friends" subtitle="Feed, high fives and side-by-side Buddies" onPress={() => router.push("/friends")} testID="row-friends" />
+          <Row icon="person-add-outline" title="Invite a Friend" onPress={() => router.push("/friends?tab=invite")} testID="row-invite" />
+          <Row icon="bookmark-outline" title="Saved Meals" onPress={() => router.push("/saved")} testID="row-saved" />
         </Card>
 
         <SectionTitle title="Subscription" />
@@ -123,6 +130,14 @@ export default function Profile() {
         <Button title="Save" onPress={savePersonal} loading={busy} style={{ marginTop: spacing.sm }} testID="personal-save" />
       </Sheet>
       <Sheet visible={sheet === "notifications"} onClose={() => setSheet(null)} title="Notifications">
+        {!remindersSupported && <Text style={styles.sub}>Reminders are delivered on your phone — they aren't available in the web preview.</Text>}
+        {remindersSupported && <Text style={styles.sub}>Reminders are scheduled on this device at sensible times (breakfast 8:00, lunch 12:30, dinner 18:30, water every few hours, streak 20:30). Never guilt-based.</Text>}
+        {(permState === "blocked" || permState === "denied") && (
+          <View style={styles.permBox} testID="notif-perm-box">
+            <Text style={styles.permText}>Notifications are turned off for NomNom. Enable them in Settings to receive Buddy's reminders.</Text>
+            <Button title="Open Settings" size="sm" variant="secondary" onPress={openNotificationSettings} />
+          </View>
+        )}
         <Text style={styles.sub}>Choose what Buddy can remind you about. Delivery requires the store build with push enabled.</Text>
         {NOTIF.map(n => <Row key={n.key} title={n.label} subtitle={n.sub} right={<Switch value={!!user?.notifications?.[n.key]} onValueChange={v => toggle("notifications", n.key, v)} trackColor={{ true: colors.brandPrimary }} />} />)}
       </Sheet>
@@ -148,6 +163,8 @@ function Target({ label, v, c = colors.onSurface }: { label: string; v: string; 
 }
 
 const styles = StyleSheet.create({
+  permBox: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.sm },
+  permText: { fontSize: fontSize.sm, color: colors.onSurface, lineHeight: 20 },
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxxl },
   hero: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
   name: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface },

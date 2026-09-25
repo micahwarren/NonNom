@@ -4,7 +4,8 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { colors, fontSize, radius, spacing } from "./theme";
 import { Button, Chip, Field, Icon, MealPicker, Sheet, useToast } from "./ui";
-import { AiItem, api, DbFood, FoodEntry, FoodItemIn, Meal } from "./api";
+import { AiItem, api, DbFood, FoodEntry, FoodItemIn, Meal, fileUrl } from "./api";
+import { useAuthToken } from "./auth-context";
 import { track } from "./analytics";
 
 export function SourceTag({ source }: { source: string }) {
@@ -22,8 +23,10 @@ export function MacroLine({ p, c, f, size = fontSize.xs }: { p: number; c: numbe
 }
 
 export function FoodRow({ item, onPress, testID }: { item: FoodEntry; onPress?: () => void; testID?: string }) {
+  const token = useAuthToken();
   return (
     <Pressable testID={testID} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${item.name}, ${item.calories} calories`} style={({ pressed }) => [s.row, pressed && { backgroundColor: colors.surface }]}>
+      {item.image_path ? <Image source={{ uri: fileUrl(item.image_path, token) }} style={s.thumb} accessibilityIgnoresInvertColors testID="food-thumb" /> : null}
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={s.rowName} numberOfLines={1}>{item.name}{item.brand ? <Text style={s.rowBrand}> · {item.brand}</Text> : null}</Text>
         <Text style={s.rowServing}>{item.quantity !== 1 ? `${item.quantity} × ` : ""}{item.serving_label}</Text>
@@ -243,6 +246,7 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onD
 }
 
 const s = StyleSheet.create({
+  thumb: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.skeleton, marginRight: spacing.md },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 64 },
   rowName: { fontSize: fontSize.md, fontWeight: "700", color: colors.onSurface },
   rowBrand: { color: colors.textSecondary, fontWeight: "600", fontSize: fontSize.sm },

@@ -90,6 +90,7 @@ function useSubscriptionContext() {
     restore: restoreMutation.mutateAsync,
     isPurchasing: purchaseMutation.isPending,
     isRestoring: restoreMutation.isPending,
+    appUserId: appUserId ?? null,
     refetchCustomerInfo: customerInfoQuery.refetch,
     refetchIdentity: () => { appUserIdQuery.refetch(); customerInfoQuery.refetch(); },
   };

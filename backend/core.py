@@ -28,6 +28,7 @@ DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ["JWT_SECRET_KEY"]
 EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
 APP_NAME = os.environ.get("APP_NAME", "nomnom")
+APP_PUBLIC_URL = (os.environ.get("APP_PUBLIC_URL") or "").rstrip("/")
 USDA_API_KEY = (os.environ.get("USDA_API_KEY") or "").strip() or "DEMO_KEY"  # DEMO_KEY = official USDA public key, 30 req/hr
 JWT_ALGO = "HS256"
 TOKEN_DAYS = 30

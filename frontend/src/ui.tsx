@@ -17,15 +17,15 @@ export function Icon({ name, size = 20, color = colors.onSurface }: { name: Icon
 // --- Button ------------------------------------------------------------------
 type ButtonProps = {
   title: string; onPress?: () => void; variant?: "primary" | "secondary" | "ghost" | "danger" | "dark";
-  size?: "md" | "lg" | "sm"; icon?: IconName; loading?: boolean; disabled?: boolean; style?: ViewStyle; testID?: string;
+  size?: "md" | "lg" | "sm"; icon?: IconName; loading?: boolean; disabled?: boolean; style?: ViewStyle; testID?: string; accessibilityLabel?: string;
 };
-export function Button({ title, onPress, variant = "primary", size = "md", icon, loading, disabled, style, testID }: ButtonProps) {
+export function Button({ title, onPress, variant = "primary", size = "md", icon, loading, disabled, style, testID, accessibilityLabel }: ButtonProps) {
   const bg = { primary: colors.brandPrimary, secondary: colors.surfaceSecondary, ghost: "transparent", danger: colors.error, dark: colors.surfaceInverse }[variant];
   const fg = { primary: colors.onBrandPrimary, secondary: colors.brandPrimary, ghost: colors.brandPrimary, danger: colors.onError, dark: colors.onSurfaceInverse }[variant];
   const h = size === "lg" ? touch.button + 4 : size === "sm" ? 38 : touch.button - 4;
   return (
     <Pressable
-      testID={testID} onPress={onPress} disabled={disabled || loading} accessibilityRole="button" accessibilityLabel={title}
+      testID={testID} onPress={onPress} disabled={disabled || loading} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? title}
       style={({ pressed }) => [
         s.btn, { backgroundColor: bg, height: h, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },
         variant === "secondary" && { borderWidth: 1.5, borderColor: colors.brandPrimary },
@@ -135,14 +135,14 @@ export function EmptyState({ icon = "leaf-outline", title, message, ctaTitle, on
   );
 }
 
-export function ErrorState({ message, onRetry, secondaryTitle, onSecondary, title = "Something went wrong" }: { message: string; onRetry?: () => void; secondaryTitle?: string; onSecondary?: () => void; title?: string }) {
+export function ErrorState({ message, onRetry, secondaryTitle, onSecondary, title = "Something went wrong", retryTitle = "Try again" }: { message: string; onRetry?: () => void; secondaryTitle?: string; onSecondary?: () => void; title?: string; retryTitle?: string }) {
   return (
     <View style={s.state} testID="error-state">
       <View style={[s.stateIcon, { backgroundColor: colors.error + "1A" }]}><Icon name="alert-circle-outline" size={28} color={colors.error} /></View>
       <Text style={s.stateTitle}>{title}</Text>
       <Text style={s.stateMsg}>{message}</Text>
       <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
-        {onRetry && <Button title="Try again" onPress={onRetry} size="sm" style={{ paddingHorizontal: spacing.lg }} />}
+        {onRetry && <Button title={retryTitle} onPress={onRetry} size="sm" style={{ paddingHorizontal: spacing.lg }} />}
         {secondaryTitle && onSecondary && <Button title={secondaryTitle} onPress={onSecondary} size="sm" variant="secondary" style={{ paddingHorizontal: spacing.lg }} />}
       </View>
     </View>

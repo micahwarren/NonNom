@@ -43,7 +43,8 @@ export default function Onboarding() {
   const [pace, setPace] = useState(p0.pace_lb_per_week ?? 1);
   const [diet, setDiet] = useState(p0.diet ?? "No preference");
   const [allergies, setAllergies] = useState<string[]>(p0.allergies ?? []);
-  const [plan, setPlan] = useState<Targets | null>(null);
+  const [plan, setPlan] = useState<(Targets & { rationale?: string[]; fiber_g?: number }) | null>(null);
+  const [showWhy, setShowWhy] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const steps: Step[] = useMemo(() => ["welcome", "goal", "about", "body", "activity", "diet", "plan"], []);
@@ -173,7 +174,16 @@ export default function Onboarding() {
             {(goal === "lose" || goal === "gain") && parseFloat(weight) && parseFloat(goalWeight) ? (
               <Text style={styles.lead}>Goal: {fmtWeight(profile().weight_kg!, units, 0)} → {fmtWeight(profile().goal_weight_kg!, units, 0)} · about {pace} lb/week</Text>
             ) : null}
-            <Text style={styles.fine}>These targets are estimates based on standard formulas. You can adjust them any time in Profile → Daily Targets. NomNom isn't medical advice.</Text>
+            <Pressable onPress={() => setShowWhy(v => !v)} style={styles.whyBtn} testID="plan-why" accessibilityRole="button">
+              <Icon name="flask-outline" size={16} color={colors.brandPrimary} /><Text style={styles.whyText}>How we calculated this</Text><Icon name={showWhy ? "chevron-up" : "chevron-down"} size={16} color={colors.brandPrimary} />
+            </Pressable>
+            {showWhy && (
+              <View style={styles.whyBox} testID="plan-rationale">
+                {(plan.rationale ?? []).map((r, i) => <Text key={i} style={styles.whyLine}>• {r}</Text>)}
+                <Text style={styles.whyRef}>Sources: Mifflin-St Jeor (1990); Frankenfield et al., JADA 2005; ISSN Position Stand on protein (Jäger et al., 2017); Morton et al., BJSM 2018; IOM Dietary Reference Intakes (2005); EFSA water adequate intakes (2010).</Text>
+              </View>
+            )}
+            <Text style={styles.fine}>These targets are estimates based on published formulas. You can adjust them any time in Profile → Daily Targets. NomNom isn't medical advice.</Text>
           </View>
         )}
       </ScrollView>
@@ -191,6 +201,11 @@ function PlanStat({ v, l, c }: { v: string; l: string; c: string }) {
 }
 
 const styles = StyleSheet.create({
+  whyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 44 },
+  whyText: { fontWeight: "800", color: colors.brandPrimary, fontSize: fontSize.sm },
+  whyBox: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, gap: 6, borderWidth: 1, borderColor: colors.border },
+  whyLine: { fontSize: fontSize.sm, color: colors.onSurface, lineHeight: 20 },
+  whyRef: { fontSize: fontSize.xs, color: colors.muted, lineHeight: 16, marginTop: 4 },
   top: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   body: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxl },
   h1: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.5 },

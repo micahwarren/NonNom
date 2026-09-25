@@ -11,31 +11,71 @@ ACTIVITY_MULT = {"sedentary": 1.2, "light": 1.375, "moderate": 1.55, "active": 1
 
 
 def compute_targets(profile: dict) -> dict:
-    """Mifflin-St Jeor based estimate. Inputs in metric (kg/cm). Returns daily targets."""
+    """Evidence-based daily targets. Inputs in metric (kg/cm). Returns targets + the rationale shown to the user.
+
+    References:
+    - Energy: Mifflin-St Jeor (1990) — most accurate predictive BMR equation for adults (Frankenfield et al., JADA 2005).
+      Activity factors 1.2–1.9 (standard PAL multipliers, FAO/WHO).
+    - Weight change: ~3,500 kcal per lb of body weight (Wishnofsky 1958) → 500 kcal/day ≈ 1 lb/week.
+      Deficit capped at 25% of TDEE; floors 1,200 (women) / 1,500 (men) kcal (NIH/ACSM guidance for unsupervised dieting).
+    - Protein: ISSN Position Stand (Jäger et al., 2017): 1.4–2.0 g/kg for active adults; Morton et al. (BJSM 2018) meta-analysis
+      ~1.6 g/kg maximizes lean-mass gains; higher (≈2.0 g/kg) helps preserve lean mass in an energy deficit (Helms et al., 2014).
+      Capped at 35% of energy (IOM AMDR 10–35%).
+    - Fat: 30% of energy (IOM AMDR 20–35%).
+    - Carbohydrate: remainder of energy (IOM AMDR 45–65%), never below the 130 g/day RDA (IOM DRI 2005) when calories allow.
+    - Fiber: 14 g per 1,000 kcal (IOM DRI 2005).
+    - Water: EFSA (2010) Adequate Intake of 2.0 L (women) / 2.5 L (men) total fluids, scaled ~35 ml/kg for heavier bodies,
+      +0.5 L for active/very active (ACSM). Capped at 4 L.
+    """
     w = float(profile.get("weight_kg") or 75)
     h = float(profile.get("height_cm") or 170)
     age = int(profile.get("age") or 30)
     sex = profile.get("sex") or "unspecified"
     goal = profile.get("goal") or "maintain"
     pace = float(profile.get("pace_lb_per_week") or 1.0)
-    act = ACTIVITY_MULT.get(profile.get("activity_level") or "light", 1.375)
+    act_key = profile.get("activity_level") or "light"
+    act = ACTIVITY_MULT.get(act_key, 1.375)
 
     sex_adj = 5 if sex == "male" else -161 if sex == "female" else -78
     bmr = 10 * w + 6.25 * h - 5 * age + sex_adj
     tdee = bmr * act
-    if goal == "lose":
-        tdee -= 500 * pace
-    elif goal == "gain":
-        tdee += 250 * max(0.5, min(pace, 1.0)) * 2
-    floor = 1500 if sex == "male" else 1200
-    calories = int(round(max(floor, tdee) / 10) * 10)
+    rationale = [f"Base metabolism (Mifflin-St Jeor): about {int(round(bmr))} kcal/day.",
+                 f"With your activity level (×{act}), you burn about {int(round(tdee))} kcal/day."]
 
-    protein_per_kg = 1.8 if goal in ("lose", "gain") else 1.5
-    protein_g = int(round(min(w * protein_per_kg, calories * 0.4 / 4)))
-    fat_g = int(round(calories * 0.27 / 9))
+    if goal == "lose":
+        deficit = min(500 * pace, 0.25 * tdee)
+        calories = tdee - deficit
+        rationale.append(f"A {int(round(deficit))} kcal/day deficit targets about {round(deficit / 500, 1)} lb/week (≈3,500 kcal per lb), capped at 25% of your burn.")
+    elif goal == "gain":
+        surplus = 250 * max(0.5, min(pace, 1.0)) * 2
+        calories = tdee + surplus
+        rationale.append(f"A {int(round(surplus))} kcal/day surplus supports gradual lean weight gain.")
+    else:
+        calories = tdee
+        rationale.append("Calories are set at maintenance so your weight stays steady.")
+    floor = 1500 if sex == "male" else 1200
+    if calories < floor:
+        rationale.append(f"Raised to the {floor} kcal safety floor recommended for unsupervised dieting.")
+    calories = int(round(max(floor, calories) / 10) * 10)
+
+    protein_per_kg = 2.0 if goal == "lose" else 1.8 if goal == "gain" else 1.6
+    protein_g = int(round(min(w * protein_per_kg, calories * 0.35 / 4)))
+    rationale.append(f"Protein: {protein_per_kg} g per kg of body weight ({protein_g} g), in line with the ISSN position stand for {'preserving muscle in a deficit' if goal == 'lose' else 'building and maintaining lean mass'}.")
+
+    fat_g = int(round(calories * 0.30 / 9))
     carbs_g = int(round(max(0, calories - protein_g * 4 - fat_g * 9) / 4))
-    water_ml = int(round(max(1500, min(4000, w * 35)) / 250) * 250)
-    return {"calories": calories, "protein_g": protein_g, "carbs_g": carbs_g, "fat_g": fat_g, "water_ml": water_ml}
+    if carbs_g < 130 and calories - protein_g * 4 - 130 * 4 >= calories * 0.20:
+        carbs_g = 130  # RDA minimum for carbohydrate
+        fat_g = int(round((calories - protein_g * 4 - carbs_g * 4) / 9))
+    rationale.append(f"Fat: 30% of calories ({fat_g} g). Carbs: the remaining energy ({carbs_g} g), following the IOM acceptable macronutrient ranges.")
+
+    fiber_g = int(round(14 * calories / 1000))
+    base_water = 2500 if sex == "male" else 2000 if sex == "female" else 2250
+    water_ml = max(base_water, w * 35) + (500 if act_key in ("active", "very_active") else 0)
+    water_ml = int(round(min(4000, water_ml) / 250) * 250)
+    rationale.append(f"Water: {water_ml / 1000:.2g} L/day based on EFSA adequate-intake guidance{' plus extra for your activity level' if act_key in ('active', 'very_active') else ''}.")
+    return {"calories": calories, "protein_g": protein_g, "carbs_g": carbs_g, "fat_g": fat_g, "fiber_g": fiber_g,
+            "water_ml": water_ml, "rationale": rationale}
 
 
 def user_targets(user: dict) -> dict:
@@ -164,30 +204,84 @@ async def build_day_summary(user: dict, day: date, tz: int) -> dict:
     return summary
 
 
-# --- streaks (logging streak) --------------------------------------------------
+# --- streaks (logging streak) + weekly Streak Freeze ---------------------------
+def _week_key(d: date) -> str:
+    y, w, _ = d.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def freeze_available(user: dict, tz: int) -> bool:
+    """One freeze per ISO week; it auto-applies when exactly one day was missed."""
+    return user.get("last_freeze_week") != _week_key(local_today(tz))
+
+
+def freeze_status(user: dict, tz: int) -> dict:
+    today = local_today(tz)
+    days_left = 7 - today.isoweekday()
+    return {"available": freeze_available(user, tz), "used_on": user.get("last_freeze_day"), "resets_in_days": days_left + 1,
+            "total_used": len(user.get("streak_freezes") or [])}
+
+
 async def touch_streak(user: dict, tz: int) -> dict:
-    today = local_today(tz).isoformat()
+    today_d = local_today(tz)
+    today = today_d.isoformat()
     last = user.get("last_logged_day")
     if last == today:
         return user
-    yesterday = (local_today(tz) - timedelta(days=1)).isoformat()
-    streak = (user.get("streak_days", 0) + 1) if last == yesterday else 1
+    yesterday = (today_d - timedelta(days=1)).isoformat()
+    two_ago = (today_d - timedelta(days=2)).isoformat()
+    updates = {}
+    if last == yesterday:
+        streak = user.get("streak_days", 0) + 1
+    elif last == two_ago and user.get("streak_days", 0) > 0 and freeze_available(user, tz):
+        streak = user.get("streak_days", 0) + 1  # freeze protected the missed day
+        updates.update({"last_freeze_week": _week_key(today_d), "last_freeze_day": yesterday})
+        updates["$push"] = {"streak_freezes": {"missed_day": yesterday, "used_at": now_utc()}}
+    else:
+        streak = 1
     longest = max(user.get("longest_streak", 0), streak)
-    await db().users.update_one({"_id": user["_id"]}, {"$set": {
-        "streak_days": streak, "longest_streak": longest, "last_logged_day": today}})
-    user.update(streak_days=streak, longest_streak=longest, last_logged_day=today)
+    push = updates.pop("$push", None)
+    level = int(user.get("level") or 1) + 1  # Buddy levels up once per logged day
+    updates["level"] = level
+    updates["last_level_up_day"] = today
+    op = {"$set": {"streak_days": streak, "longest_streak": longest, "last_logged_day": today, **updates}}
+    if push:
+        op["$push"] = push
+    await db().users.update_one({"_id": user["_id"]}, op)
+    user.update(streak_days=streak, longest_streak=longest, last_logged_day=today, **updates)
+    if push:
+        user["streak_freeze_applied"] = yesterday
     return user
 
 
 def effective_streak(user: dict, tz: int) -> int:
-    """Streak counts only if user logged today or yesterday."""
+    """Streak counts if user logged today/yesterday, or 2 days ago with a freeze still available (it will protect the gap)."""
     last = user.get("last_logged_day")
     if not last:
         return 0
     today = local_today(tz)
     if last in (today.isoformat(), (today - timedelta(days=1)).isoformat()):
         return int(user.get("streak_days", 0))
+    if last == (today - timedelta(days=2)).isoformat() and freeze_available(user, tz):
+        return int(user.get("streak_days", 0))
     return 0
+
+
+# --- social posts (privacy-aware, deduped per day) -----------------------------
+POST_PRIVACY = {"daily_goal": "show_nutrition_achievements", "protein_goal": "show_nutrition_achievements",
+                "hydration_goal": "show_hydration_achievements", "streak": "show_streak",
+                "achievement": "show_achievements", "cosmetic": "show_cosmetics"}
+
+
+async def emit_post(user: dict, kind: str, text: str, tz: int, meta: Optional[dict] = None):
+    privacy = user.get("privacy") or {}
+    if not privacy.get(POST_PRIVACY.get(kind, ""), True):
+        return
+    key = f"{user['_id']}:{kind}:{meta.get('key') if meta and meta.get('key') else local_today(tz).isoformat()}"
+    if await db().social_posts.find_one({"dedupe_key": key}):
+        return
+    await db().social_posts.insert_one({"user_id": user["_id"], "kind": kind, "text": text, "meta": meta or {},
+                                        "dedupe_key": key, "reactions": [], "created_at": now_utc()})
 
 
 # --- achievements --------------------------------------------------------------
@@ -235,9 +329,22 @@ async def check_achievements(user: dict, tz: int) -> list[dict]:
             earned.add("perfect_week")
 
     new_ids = [a for a in earned if a not in have]
+    # social feed events (deduped per day, privacy-aware)
+    if summary["entries"] and abs(summary["calories_in"] - summary["calories_burned"] - t["calories"]) <= t["calories"] * 0.1 and summary["protein_g"] >= t["protein_g"]:
+        await emit_post(user, "daily_goal", "Hit today's calorie and protein goals", tz)
+    if summary["protein_g"] >= t["protein_g"]:
+        await emit_post(user, "protein_goal", "Hit my protein goal today", tz)
+    if summary["water_ml"] >= t["water_ml"]:
+        await emit_post(user, "hydration_goal", "Water goal complete", tz)
+    if streak in (3, 7, 14, 30, 60, 100):
+        await emit_post(user, "streak", f"Reached a {streak}-day logging streak", tz, {"key": f"streak_{streak}", "streak": streak})
     if not new_ids:
         return []
     catalog = {a["id"]: a for a in ACHIEVEMENTS}
+    for i in new_ids:
+        await emit_post(user, "achievement", f"Earned the {catalog[i]['name']} badge", tz, {"key": i, "achievement_id": i})
+        if catalog[i].get("reward"):
+            await emit_post(user, "cosmetic", f"Unlocked {COSMETIC_BY_ID[catalog[i]['reward']]['name']} for Buddy", tz, {"key": catalog[i]["reward"], "cosmetic_id": catalog[i]["reward"]})
     new_docs = [{"id": i, "unlocked_at": now_utc()} for i in new_ids]
     rewards = [catalog[i]["reward"] for i in new_ids if catalog[i].get("reward")]
     update = {"$push": {"achievements": {"$each": new_docs}}}
