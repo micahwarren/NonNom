@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
@@ -13,6 +13,8 @@ import { reactionState, useBuddyReaction } from "@/src/buddy-reaction-context";
 
 export default function Home() {
   const { colors, styles } = useThemeStyles(createStyles);
+  const { width } = useWindowDimensions();
+  const buddySize = Math.min(255, width - spacing.lg * 2);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
@@ -77,13 +79,13 @@ export default function Home() {
 
         {/* Buddy hero */}
         {loading ? (
-          <View style={{ alignItems: "center", gap: spacing.md, paddingVertical: spacing.lg }}><Skeleton height={150} width={150} radius={75} /><Skeleton height={22} width={160} /><Skeleton height={16} width={260} /></View>
+          <View style={{ alignItems: "center", gap: spacing.md, paddingVertical: spacing.lg }}><Skeleton height={buddySize} width={buddySize} radius={buddySize / 2} /><Skeleton height={22} width={160} /><Skeleton height={16} width={260} /></View>
         ) : err ? (
           <ErrorState message={err} onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} title="Couldn't load your day" />
         ) : (
           <View style={styles.hero}>
             <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel="Customize Buddy" testID="buddy-hero">
-              <BuddyAvatar state={reactionState(active, summary?.buddy.state ?? "neutral")} reactionKey={active?.id} equipped={user?.buddy?.equipped} size={150} level={level} testID="home-buddy-avatar" />
+              <BuddyAvatar state={reactionState(active, summary?.buddy.state ?? "neutral")} reactionKey={active?.id} equipped={user?.buddy?.equipped} size={buddySize} level={level} testID="home-buddy-avatar" />
             </Pressable>
             <View style={styles.levelPill} testID="level-pill">
               <Icon name="star" size={12} color={colors.premium} />

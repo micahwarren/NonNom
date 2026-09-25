@@ -1,0 +1,52 @@
+{
+  "summary": "Frontend-only regression completed on public preview for requested iteration9 fix scope. Macro method sheet viewport/footer behavior now passes at 320x568 and 320x844 in dark mode (scroll + close/reopen validated), shared add sheet scrolling/navigation/backdrop close passes at 320x568 and 390x844, and buddy info advice sheet opens/dismisses without render errors. One accessibility regression remains on auto macros switch checked-state exposure.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Auto macros toggle accessibility state",
+        "issue": "`auto-macros-toggle` has role `switch` but does not expose checked state on web (`aria-checked` is null before and after toggle), so checked state is not programmatically available as requested.",
+        "testID": "auto-macros-toggle",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "Switch (react-native-web rendering)",
+        "issue": "Web output does not include checked semantics for the tested switch node; accessibility state is not surfaced for automation/screen-reader parity checks."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/artifacts_iter10/home_loaded_320x568.jpeg",
+    "/app/test_reports/artifacts_iter10_run3/macro_sheet_320x568_dark.jpeg",
+    "/app/test_reports/artifacts_iter10_run3/final_home_light.jpeg",
+    "/app/test_reports/artifacts_iter10_run5/close_checks.jpeg"
+  ],
+  "action_items": [
+    "Fix `auto-macros-toggle` to expose checked accessibility state on web (e.g., ensure `aria-checked` updates with toggle state on the element carrying role=switch).",
+    "Re-run focused accessibility regression for switch semantics after fix at 320 mobile viewport."
+  ],
+  "critical_code_review_comments": [
+    "Macro method sheet fix is effective: close button remains in-bounds/pinned footer before and after body scroll on 320 dark.",
+    "Shared add sheet now scrolls to last action (`add-saved`) on short viewport and supports both navigation and backdrop-dismiss without data entry.",
+    "Theme was restored to light by end of run as requested."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_10.json"
+  ],
+  "success_rate": {
+    "backend": "N/A (frontend-only scope)",
+    "frontend": "97%"
+  },
+  "seed_data_creation": "No new account, purchase, or AI request created. Used existing QA account qa.nom.scanrefund@example.com.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified pass cases: macro method sheet viewport bounds + pinned close at 320 dark (568/844), close works without force, reopen works, source list scroll reaches macro-source-leidy; add-log-sheet reaches all 8 options with scroll and closes via backdrop; buddy-info sheet opens/dismisses. Remaining gap is switch checked-state semantics only.",
+  "rca_of_issue": "Repro: open /edit-targets, inspect `[data-testid=auto-macros-toggle]` at 320 mobile viewport, toggle ON/OFF. Result: element has `role=switch` but no checked indicator (`aria-checked` remains null). Likely root cause is react-native-web Switch output not mapping `accessibilityState.checked` onto the target node used for testID/AT semantics. Mitigation: ensure the role-bearing/testID-bearing node receives explicit checked semantics (or use a custom switch wrapper that controls role + aria-checked directly)."
+}

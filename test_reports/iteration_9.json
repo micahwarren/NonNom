@@ -1,0 +1,56 @@
+{
+  "summary": "Frontend follow-up regression executed on public preview (mobile-first). Core login/home/profile ordering, macro auto-preview/save behavior, scan start-over refund flow, and subscription manage/restore routes were validated. One reproducible UI bug found at 320 dark mode in macro method sheet.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Macro method sheet close action",
+        "issue": "At 320px width in dark mode, `macro-method-close` becomes outside visible viewport and was not tappable in automation (Element is outside viewport).",
+        "testID": "macro-method-close",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Edit Targets (dark, 320)",
+        "issues": [
+          "Bottom of method sheet content/actions can render below viewport; close action not reliably reachable at small width."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/artifacts_iter9/home_390.jpeg",
+    "/app/test_reports/artifacts_iter9/macro_sheet_320_dark.jpeg",
+    "/app/test_reports/artifacts_iter9/scan_run4_final.jpeg",
+    "/app/test_reports/artifacts_iter9/home_320_after_restore.jpeg"
+  ],
+  "action_items": [
+    "Fix `macro-method-sheet` small-screen layout so `macro-method-close` is always visible/tappable at 320 width (dark/light).",
+    "Ensure method sheet supports reliable scrolling and safe bottom inset handling on web preview/mobile viewport.",
+    "Optional testability improvement: expose stable checked-state hook for `auto-macros-toggle` to simplify automation assertions."
+  ],
+  "critical_code_review_comments": [
+    "Cancelled restaurant feature remains absent in UI and API behavior; no Google/Places network calls were observed during tested flows.",
+    "Profile order is correct: subscription card renders before My Goal card.",
+    "Manage subscription and Restore purchases routes both still navigate to paywall for free plan."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_9.json",
+    "/app/tests/assets/meal_scan.jpg"
+  ],
+  "success_rate": {
+    "backend": "N/A (frontend-only scope)",
+    "frontend": "92%"
+  },
+  "seed_data_creation": "No new account created. Test image fixture downloaded at /app/tests/assets/meal_scan.jpg. Note: QA scanrefund account currently shows 2 of 3 free scans left after verification reruns.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Validated: fresh login reaches home-buddy-avatar, buddy size capped at 255 at 390/320 with no horizontal overflow, subscription before goal, scan analyze decrements usage and start-over refund restores usage, retry after forced discard network failure works, duplicate Start over sends one discard request. Restored targets to 2430/112/313/81 water 2500 and returned app to light mode.",
+  "rca_of_issue": "Macro method sheet regression RCA: at 320 width + dark mode, sheet action area can render outside visible viewport; close button (`macro-method-close`) cannot always be tapped. Likely missing constrained max-height + internal scroll and/or insufficient bottom inset handling in sheet layout. Mitigation: enforce sheet body scroll container with safe-area padded footer and keep action button pinned within viewport."
+}

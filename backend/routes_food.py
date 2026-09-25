@@ -10,9 +10,10 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from core import (db, current_user, tz_dep, oid, now_utc, local_today, day_bounds, infer_meal, to_local_day,
-                  ai_gate, ai_record, ai_json, put_object_sync, APP_NAME, USDA_API_KEY, MEALS, logger)
+                  ai_gate, ai_record, ai_json, ai_usage_today, put_object_sync, APP_NAME, USDA_API_KEY, MEALS, logger)
 from nutrition import touch_streak, check_achievements
 from buddy_reactions import react_to_log
+from scan_credits import claim_photo_scan, complete_scan_claim, discard_photo_scan
 
 router = APIRouter()
 Meal = Literal["breakfast", "lunch", "dinner", "snacks"]
@@ -39,12 +40,26 @@ class FoodIn(BaseModel):
     provider_id: Optional[str] = None
     image_path: Optional[str] = None
     logged_date: Optional[str] = None  # YYYY-MM-DD, defaults to today
+    scan_id: Optional[str] = None
 
 
 class FoodBatchIn(BaseModel):
     items: list[FoodIn] = Field(min_length=1, max_length=30)
     meal: Optional[Meal] = None
     image_path: Optional[str] = None
+    scan_id: Optional[str] = None
+
+
+class ScanUsageOut(BaseModel):
+    used: int
+    limit: Optional[int] = None
+
+
+class DiscardScanOut(BaseModel):
+    scan_id: str
+    refunded: bool
+    already_refunded: bool
+    usage: ScanUsageOut
 
 
 class FoodPatch(BaseModel):
@@ -129,7 +144,15 @@ async def food_for_day(date_: Optional[str] = Query(default=None, alias="date"),
 @react_to_log("food")
 async def log_food(body: FoodIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     d = _doc_from(body, user, tz)
-    r = await db().food_logs.insert_one(d)
+    claim = await claim_photo_scan(user, body.scan_id, body.image_path)
+    if claim:
+        d["scan_id"] = str(claim["id"])
+    try:
+        r = await db().food_logs.insert_one(d)
+    except Exception:
+        await complete_scan_claim(claim, False)
+        raise
+    await complete_scan_claim(claim, True)
     d["_id"] = r.inserted_id
     unlocked = await _after_log(user, tz)
     return {**food_out(d, tz), "unlocked": unlocked}
@@ -139,7 +162,24 @@ async def log_food(body: FoodIn, user=Depends(current_user), tz: int = Depends(t
 @react_to_log("food")
 async def log_food_batch(body: FoodBatchIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     docs = [_doc_from(i, user, tz, body.meal, body.image_path) for i in body.items]
-    r = await db().food_logs.insert_many(docs)
+    ids = {d["scan_id"] for d in docs if d.get("scan_id")}
+    if body.scan_id:
+        ids.add(body.scan_id)
+    if len(ids) > 1:
+        raise HTTPException(400, "Log one photo scan at a time")
+    paths = {d["image_path"] for d in docs if d.get("image_path")}
+    if len(paths) > 1:
+        raise HTTPException(400, "Log one photo image at a time")
+    claim = await claim_photo_scan(user, next(iter(ids), None), next(iter(paths), None))
+    if claim:
+        for doc in docs:
+            doc["scan_id"] = str(claim["id"])
+    try:
+        r = await db().food_logs.insert_many(docs)
+    except Exception:
+        await complete_scan_claim(claim, False)
+        raise
+    await complete_scan_claim(claim, True)
     for d, _id in zip(docs, r.inserted_ids):
         d["_id"] = _id
     unlocked = await _after_log(user, tz)
@@ -229,7 +269,6 @@ async def analyze_photo(body: PhotoIn, user=Depends(current_user), tz: int = Dep
         await ai_record(user, "meal_photo_scan", "error", {"error": str(e)[:200]})
         raise HTTPException(502, "Buddy couldn't recognize this meal. Try another photo or enter it manually.")
     items = _clean_items(parsed.get("items", []))
-    await ai_record(user, "meal_photo_scan", "ok", {"items": len(items)})
     image_path = None
     try:
         image_path = f"{APP_NAME}/uploads/{user['_id']}/{uuid.uuid4()}.jpg"
@@ -237,8 +276,16 @@ async def analyze_photo(body: PhotoIn, user=Depends(current_user), tz: int = Dep
     except Exception as e:
         logger.warning(f"Image upload failed (continuing): {e}")
         image_path = None
-    return {"items": items, "confidence": parsed.get("confidence", "medium"), "image_path": image_path,
+    scan_id = await ai_record(user, "meal_photo_scan", "ok", {"items": len(items), "image_path": image_path, "refundable": True, "scan_state": "unused"})
+    return {"scan_id": scan_id, "items": items, "confidence": parsed.get("confidence", "medium"), "image_path": image_path,
             "suggested_meal": infer_meal(tz), "data_source": "ai_estimate"}
+
+
+@router.post("/food/photo/{scan_id}/discard", response_model=DiscardScanOut)
+async def discard_scan(scan_id: str, user=Depends(current_user), tz: int = Depends(tz_dep)):
+    restored = await discard_photo_scan(user, scan_id)
+    usage = await ai_usage_today(user, tz)
+    return DiscardScanOut(scan_id=scan_id, refunded=True, already_refunded=not restored, usage=ScanUsageOut(**usage["meal_photo_scan"]))
 
 
 DESCRIBE_SYSTEM = (

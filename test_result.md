@@ -104,6 +104,30 @@
 
 user_problem_statement: "Simplify Buddy and Log; one cup water; advice info popup; horizontal daily history; fix subscription layout and Edit Goal; new outfits, funny accessories and shaped Noms with responsive expressions; optional dark mode."
 frontend:
+  - task: "Unused photo scan refund, larger Buddy, top subscription, evidence-informed automatic macros"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "testing"
+        working: true
+        comment: "Final reports8–11: backend18/18, functionalfrontendflows pass, HIGH sheetclose fixed+verified320x568/844dark; HIGH switchwrapperduplication removed, namednativeinputchecked/click/Space/fieldeditable behavior verified. All requestedscopecomplete; Googleideacancellednotbuilt."
+      - agent: "testing"
+        working: false
+        comment: "Iteration9 UI92%pass: scanrefund failure/retry/counter restoration, duplicateclick, bigNom, topSubscription, macropreview/save/manual allpassed. MacroMethod close unreachableat320dark (HIGH)."
+      - agent: "main"
+        working: "NA"
+        comment: "FixedHIGH: Sheet now boundsheight tosafeviewport, scrollbody shrinks correctly, optionalfooter stayspinned; methodGotIt movedtofooter. Addedchecked accessibilitystate toautomacroswitch. Selfcheck320x568dark closesreliablyandlinksreadable; Addmenu now scrollableonshortscreens. Finalnarrowtestingagentrequested, no backendrerunornewAIcalls."
+      - agent: "testing"
+        working: "NA"
+        comment: "Iteration8 backend18/18pass including actualphotoAI+storage, refunds/lograce/ownership/consumed/auto/manualmacros. UItest initially used not-yet-onboardedQA account and hit expectedonboarding screen; accountnowonboardedtrue. Troubleshooter confirmednormalgate, noappcodebug. Frontendretetsmustloginfresh afterfixtureonboardingcompletion; do notrerun8liveAIbackendtests."
+      - agent: "user"
+        working: false
+        comment: "Return free scan when Start over discards it unused. Enlarge home Nom70%, move subscription to top of You; changing calories should recalculate macros using goals/targetweight and science. NearbyGoogle restaurant feature cancelled explicitly."
+      - agent: "main"
+        working: "NA"
+        comment: "Atomic unused/logging/consumed/discarded scan states; ownership/type/idempotency protected. Analysis returns scan_id, confirm logging claims it; Start over awaits refund and updates counter, failure keeps result. Used/deleted scan cannot refund; prior-day doesn't become today credit. Manual fallback refunds unused empty scan. Nom150->255 responsive, subscription first underidentity. New deterministic adult macro_targets.py uses goal/current planningweight, active1.6/1.8/2.0gkg or loweractivity1.2/1.6, clips withinadultAMDR and carb>=130, fat20–35%; sources+honest app-convention explanation. Auto previews debounce and ignorestale, save recomputesserver, partialcal-onlyAPI auto; manual override remains. Source links inmethodsheet. TSC/PythonnewJS lintpassed. Needsrealtestingagent verification."
   - task: "Meal macro estimates, Premium limits, every-log reactions, full state and headline layout"
     implemented: true
     working: true
@@ -194,9 +218,11 @@ backend:
         working: "NA"
         comment: "Catalog defaults support old users; shape/shoes validated by equip endpoint with existing free/premium checks. No auth credentials changed."
 test_plan:
-  current_focus: ["Meal macro estimates, Premium limits, every-log reactions, full state and headline layout"]
+  current_focus: ["Current requested scan/layout/macro scope complete; earlier physical Expo Go crash confirmation remains separate"]
   test_all: false
 agent_communication:
+  - agent: "main"
+    message: "Finished current scope only after testing reports8–11. For nativeSwitch testing inspect actual named control/is_checked, not wrapper aria attr. Scientific macro conventions/sources documented memory/macro_method.md. QAonly fixtures used; demo/Alex unchanged. Report9 left QA scanrefund2/3 scans today, do not assume freshquota in futuretests. NoMaps/restaurantintegration; userexplicitlycancelled."
   - agent: "main"
     message: "Current macros/Premium/reactions/headline request verified by reports5-7. No manual Premium grants. QApro account activated via actual TestStore providerconfirmation (simulated billing). Unit fixtures are isolated, no production mocks. Native forcequit from earlier request still unconfirmed on phone. Future agents: check configured DB_NAME nomnom_db, not guessed nomnom."
   - agent: "main"

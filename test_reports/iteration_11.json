@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend-only single-check retest completed on public preview at 320x568 after fresh login. Auto-adjust macros switch now exposes one real named control, checked state updates via click and Space, and macro field editability correctly follows OFF/ON state.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/artifacts_iter11_run3/final_switch_retest_pass.jpeg",
+    "/app/test_reports/artifacts_iter11_run3"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "`edit-targets.tsx` Switch uses native semantics correctly: one role=switch control found by accessible name `Auto-adjust macros`.",
+    "Redundant `role=switch` on the `auto-macros-toggle` wrapper is removed (wrapper role is null).",
+    "Checked state validation should target the real control via `is_checked()` rather than wrapper `aria-checked` assertions."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_11.json"
+  ],
+  "success_rate": {
+    "backend": "N/A (frontend-only scope)",
+    "frontend": "100%"
+  },
+  "seed_data_creation": "No seed data created. Used existing QA account qa.nom.scanrefund@example.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Scope intentionally limited to iteration10 accessibility follow-up on Edit Targets switch semantics at 320 viewport. No save/purchase/scan flows executed.",
+  "rca_of_issue": "Prior HIGH finding was a targeting mismatch: wrapper testID node was treated as the switch state source. React Native Web Switch renders a native input control carrying checked semantics; after removing redundant wrapper role, a single real named switch remains and native checked behavior is correct."
+}

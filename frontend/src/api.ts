@@ -12,6 +12,7 @@ export function registerEntitlementSync(sync: () => Promise<void>) {
 const needsEntitlement = (path: string) => ["/ai/feed-me", "/food/photo/analyze", "/food/describe", "/me/usage", "/buddy/cosmetics", "/buddy/equip", "/saved-meals"].includes(path.split("?")[0]);
 
 export type Targets = { calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number };
+export type TargetPreview = Targets & { rationale?: string[]; fiber_g?: number; warnings?: string[]; sources?: { id: string; title: string; url: string }[]; reference_weight_kg?: number; protein_g_per_kg?: number; macro_calories?: number };
 export type Profile = {
   goal?: "lose" | "maintain" | "gain" | "improve"; age?: number; height_cm?: number; weight_kg?: number;
   goal_weight_kg?: number; sex?: "male" | "female" | "unspecified"; activity_level?: string;
@@ -22,7 +23,7 @@ export type PublicUser = {
   id: string; email: string; name: string; username: string; plan: "free" | "premium";
   onboarding_complete: boolean; profile: Profile; targets: Targets; streak_days: number; longest_streak: number; targets_rationale?: string[]; streak_freeze?: StreakFreeze; level?: number; leveled_today?: boolean;
   buddy: { equipped: Equipped }; unlocked_cosmetics: string[]; achievements: { id: string; unlocked_at: string }[];
-  notifications: Record<string, boolean>; privacy: Record<string, boolean>;
+  notifications: Record<string, boolean>; privacy: Record<string, boolean>; macro_mode?: "auto" | "manual";
 };
 export type Meal = "breakfast" | "lunch" | "dinner" | "snacks";
 export type FoodEntry = {
@@ -103,9 +104,9 @@ export const api = {
   login: (email: string, password: string) => request<{ access_token: string; user: PublicUser }>("/auth/login", { method: "POST", body: json({ email, password }) }),
   me: () => request<PublicUser>("/auth/me"),
   usage: () => request<Record<string, { used: number; limit: number | null }>>("/me/usage"),
-  updateMe: (payload: { name?: string; username?: string; profile?: Profile; targets?: Partial<Targets> }) => request<PublicUser>("/me", { method: "PATCH", body: json(payload) }),
+  updateMe: (payload: { name?: string; username?: string; profile?: Profile; targets?: Partial<Targets>; auto_macros?: boolean }) => request<PublicUser>("/me", { method: "PATCH", body: json(payload) }),
   onboarding: (profile: Profile, name?: string) => request<PublicUser>("/me/onboarding", { method: "POST", body: json({ profile, name }) }),
-  previewTargets: (profile: Profile) => request<Targets & { rationale?: string[]; fiber_g?: number }>("/me/targets/preview", { method: "POST", body: json(profile) }),
+  previewTargets: (profile: Profile, calories?: number) => request<TargetPreview>("/me/targets/preview", { method: "POST", body: json({ ...profile, calories }) }),
   updateNotifications: (prefs: Record<string, boolean>) => request<Record<string, boolean>>("/me/notifications", { method: "PATCH", body: json(prefs) }),
   updatePrivacy: (prefs: Record<string, boolean>) => request<Record<string, boolean>>("/me/privacy", { method: "PATCH", body: json(prefs) }),
   syncEntitlement: (premium: boolean) => request<PublicUser>("/me/entitlement", { method: "POST", body: json({ premium, source: "revenuecat" }) }),
@@ -113,12 +114,13 @@ export const api = {
 
   foodDay: (date?: string) => request<FoodDay>(`/food${date ? `?date=${date}` : ""}`),
   logFood: (item: FoodItemIn) => request<FoodEntry & { unlocked: Achievement[] }>("/food", { method: "POST", body: json(item) }),
-  logFoodBatch: (items: FoodItemIn[], meal?: Meal, image_path?: string | null) => request<{ items: FoodEntry[]; unlocked: Achievement[] }>("/food/batch", { method: "POST", body: json({ items, meal, image_path }) }),
+  logFoodBatch: (items: FoodItemIn[], meal?: Meal, image_path?: string | null, scan_id?: string) => request<{ items: FoodEntry[]; unlocked: Achievement[] }>("/food/batch", { method: "POST", body: json({ items, meal, image_path, scan_id }) }),
   editFood: (id: string, patch: Partial<Pick<FoodEntry, "name" | "calories" | "protein_g" | "carbs_g" | "fat_g" | "serving_label" | "quantity" | "meal">>) => request<FoodEntry>(`/food/${id}`, { method: "PATCH", body: json(patch) }),
   duplicateFood: (id: string, meal?: Meal) => request<FoodEntry>(`/food/${id}/duplicate${meal ? `?meal=${meal}` : ""}`, { method: "POST" }),
   deleteFood: (id: string) => request(`/food/${id}`, { method: "DELETE" }),
   recentFoods: () => request<FoodEntry[]>("/food/recent"),
-  analyzePhoto: (image_base64: string) => request<{ items: AiItem[]; confidence: string; image_path: string | null; suggested_meal: Meal }>("/food/photo/analyze", { method: "POST", body: json({ image_base64 }) }),
+  analyzePhoto: (image_base64: string) => request<{ scan_id: string; items: AiItem[]; confidence: string; image_path: string | null; suggested_meal: Meal }>("/food/photo/analyze", { method: "POST", body: json({ image_base64 }) }),
+  discardPhoto: (scanId: string) => request<{ scan_id: string; refunded: boolean; already_refunded: boolean; usage: { used: number; limit: number | null } }>(`/food/photo/${encodeURIComponent(scanId)}/discard`, { method: "POST" }),
   describeMeal: (text: string) => request<{ items: AiItem[]; suggested_meal: Meal }>("/food/describe", { method: "POST", body: json({ text }) }),
   searchFood: (q: string) => request<{ results: DbFood[]; providers: string[] }>(`/food/search?q=${encodeURIComponent(q)}`),
   barcode: (code: string) => request<{ product: DbFood }>(`/food/barcode/${encodeURIComponent(code)}`),

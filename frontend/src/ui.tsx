@@ -1,7 +1,7 @@
 // NomNom design system — reusable primitives. Every screen composes from these.
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle, Platform, KeyboardAvoidingView,
+  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle, Platform, KeyboardAvoidingView, useWindowDimensions,
 } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing, FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -266,21 +266,23 @@ export function Row({ icon, title, subtitle, onPress, right, danger, testID, ico
 }
 
 // --- Sheet (bottom sheet built on Modal for cross-platform reliability) -------
-export function Sheet({ visible, onClose, title, children, scroll = true, testID = "bottom-sheet" }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode; scroll?: boolean; testID?: string }) {
+export function Sheet({ visible, onClose, title, children, footer, scroll = true, testID = "bottom-sheet" }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode; footer?: React.ReactNode; scroll?: boolean; testID?: string }) {
   const { styles: s } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const y = useSharedValue(400);
-  useEffect(() => { if (visible) y.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) }); else y.value = 400; }, [visible]);
+  useEffect(() => { if (visible) y.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) }); else y.value = 400; }, [visible, y]);
   const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
   const Body = scroll ? ScrollView : View;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <Pressable testID={`${testID}-backdrop`} style={s.backdrop} onPress={onClose} accessibilityLabel="Close sheet" />
-        <Animated.View testID={testID} accessibilityViewIsModal style={[s.sheet, { paddingBottom: insets.bottom + spacing.lg }, st]}>
+        <Animated.View testID={testID} accessibilityViewIsModal style={[s.sheet, { maxHeight: height - insets.top - spacing.md, paddingBottom: insets.bottom + spacing.lg }, st]}>
           <View style={s.grabber} />
           {title && <Text style={s.sheetTitle}>{title}</Text>}
-          <Body style={{ maxHeight: 560 }} contentContainerStyle={scroll ? { gap: spacing.sm } : undefined} keyboardShouldPersistTaps="handled">{children}</Body>
+          <Body testID={`${testID}-body`} style={[s.sheetBody, { maxHeight: 560 }]} contentContainerStyle={scroll ? { gap: spacing.sm, paddingBottom: spacing.sm } : undefined} keyboardShouldPersistTaps="handled">{children}</Body>
+          {footer && <View testID={`${testID}-footer`} style={s.sheetFooter}>{footer}</View>}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
@@ -366,7 +368,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   rowTitle: { fontSize: fontSize.md, fontWeight: "700", color: colors.onSurface },
   rowSub: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   backdrop: { flex: 1, backgroundColor: colors.overlay },
-  sheet: { backgroundColor: colors.surfaceSecondary, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  sheet: { flexShrink: 1, backgroundColor: colors.surfaceSecondary, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  sheetBody: { flexShrink: 1, flexGrow: 0, minHeight: 0 },
+  sheetFooter: { flexShrink: 0, paddingTop: spacing.md },
   grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: "center", marginBottom: spacing.md },
   sheetTitle: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface, marginBottom: spacing.md },
   toast: { position: "absolute", left: spacing.lg, right: spacing.lg },

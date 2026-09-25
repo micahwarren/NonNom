@@ -164,10 +164,11 @@ async def ai_gate(user: dict, usage_type: str, tz: int):
 
 
 async def ai_record(user: dict, usage_type: str, status: str, meta: Optional[dict] = None):
-    await db().ai_usage.insert_one({
+    result = await db().ai_usage.insert_one({
         "user_id": user["_id"], "type": usage_type, "status": status,
         "created_at": now_utc(), "meta": meta or {},
     })
+    return str(result.inserted_id)
 
 
 async def ai_usage_today(user: dict, tz: int) -> dict:

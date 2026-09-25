@@ -183,7 +183,7 @@ function Nutri({ label, v, color, big }: { label: string; v: string; color?: str
 }
 
 // --- Confirm AI-detected items before logging -----------------------------------
-export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onDone, onCancel, source }: { items: AiItem[]; meal: Meal; imagePath?: string | null; onDone: () => void; onCancel: () => void; source: "photo" | "describe" }) {
+export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, scanId, onDone, onCancel, source }: { items: AiItem[]; meal: Meal; imagePath?: string | null; scanId?: string; onDone: () => void; onCancel: () => void | Promise<void>; source: "photo" | "describe" }) {
   const { colors, styles: s } = useThemeStyles(createStyles);
   const toast = useToast();
   const router = useRouter();
@@ -191,6 +191,7 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onD
   const [meal, setMeal] = useState<Meal>(initialMeal);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [newName, setNewName] = useState(""); const [newCal, setNewCal] = useState("");
   const totals = items.reduce((a, i) => { const q = parseFloat(i.qty) || 0; return { cal: a.cal + i.calories * q, p: a.p + i.protein_g * q, c: a.c + i.carbs_g * q, f: a.f + i.fat_g * q }; }, { cal: 0, p: 0, c: 0, f: 0 });
 
@@ -199,12 +200,20 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onD
     setBusy(true);
     const payload: FoodItemIn[] = items.map(i => { const q = parseFloat(i.qty) || 1; return { name: i.name, serving_label: i.serving_label, quantity: q, calories: Math.round(i.calories * q), protein_g: +(i.protein_g * q).toFixed(1), carbs_g: +(i.carbs_g * q).toFixed(1), fat_g: +(i.fat_g * q).toFixed(1), source, data_source: i.data_source ?? "ai_estimate" }; });
     try {
-      const r = await api.logFoodBatch(payload, meal, imagePath ?? null);
+      const r = await api.logFoodBatch(payload, meal, imagePath ?? null, scanId);
       track("meal_logged", { source, items: payload.length });
       toast.show(`Logged ${payload.length} item${payload.length > 1 ? "s" : ""} to ${meal}`);
       if (r.unlocked?.length) setTimeout(() => toast.show(`Achievement unlocked: ${r.unlocked[0].name}`, { icon: "trophy" }), 900);
       onDone();
     } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } finally { setBusy(false); }
+  }
+
+  async function startOver(manual = false) {
+    if (busy || cancelling) return;
+    setCancelling(true);
+    try { await onCancel(); if (manual) router.replace("/search"); }
+    catch (error: any) { toast.show(error.message ?? "Couldn’t return this scan. Please try again.", { icon: "alert-circle" }); }
+    finally { setCancelling(false); }
   }
 
   return (
@@ -246,9 +255,9 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onD
       </View>
       <Text style={s.label}>Meal</Text>
       <MealPicker value={meal} onChange={setMeal} />
-      <Button title={items.length ? `Add ${items.length} item${items.length > 1 ? "s" : ""}` : "Nothing to add"} onPress={save} loading={busy} disabled={!items.length} size="lg" testID="ai-confirm-log" />
-      <Button title="Start over" variant="ghost" onPress={onCancel} />
-      {!items.length && <Button title="Enter manually instead" variant="secondary" onPress={() => router.replace("/search")} />}
+      <Button title={items.length ? `Add ${items.length} item${items.length > 1 ? "s" : ""}` : "Nothing to add"} onPress={save} loading={busy} disabled={!items.length || cancelling} size="lg" testID="ai-confirm-log" />
+      <Button title={cancelling ? "Starting over…" : "Start over"} variant="ghost" onPress={() => startOver()} loading={cancelling} disabled={busy} testID="ai-start-over" />
+      {!items.length && <Button title="Enter manually instead" variant="secondary" onPress={() => startOver(true)} disabled={busy || cancelling} testID="ai-manual-fallback" />}
     </View>
   );
 }

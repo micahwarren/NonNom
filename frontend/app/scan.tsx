@@ -6,7 +6,7 @@ import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/th
 import { AiItem, api, Meal } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar } from "@/src/buddy";
-import { Button, Card, ErrorState, Icon, PremiumBadge, ScreenHeader } from "@/src/ui";
+import { Button, Card, ErrorState, Icon, PremiumBadge, ScreenHeader, useToast } from "@/src/ui";
 import { ConfirmItems } from "@/src/food-components";
 import { track } from "@/src/analytics";
 
@@ -14,9 +14,10 @@ export default function Scan() {
   const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { user, isPremium } = useAuth();
+  const toast = useToast();
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [result, setResult] = useState<{ items: AiItem[]; meal: Meal; image_path: string | null; confidence: string } | null>(null);
+  const [result, setResult] = useState<{ scan_id: string; items: AiItem[]; meal: Meal; image_path: string | null; confidence: string } | null>(null);
   const [error, setError] = useState<{ msg: string; status: number } | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number | null } | null>(null);
   const [permDenied, setPermDenied] = useState(false);
@@ -38,8 +39,16 @@ export default function Scan() {
     try {
       const r = await api.analyzePhoto(asset.base64);
       track("ai_scan_completed", { items: r.items.length });
-      setResult({ items: r.items, meal: r.suggested_meal, image_path: r.image_path, confidence: r.confidence });
+      setResult({ scan_id: r.scan_id, items: r.items, meal: r.suggested_meal, image_path: r.image_path, confidence: r.confidence });
     } catch (e: any) { setError({ msg: e.message ?? "Buddy couldn't recognize this meal.", status: e.status ?? 0 }); } finally { setAnalyzing(false); }
+  }
+
+  async function startOver() {
+    if (!result) return;
+    const refunded = await api.discardPhoto(result.scan_id);
+    setUsage(refunded.usage);
+    setResult(null); setImageUri(null); setError(null);
+    toast.show(isPremium ? "Unused scan discarded" : "Your unused free scan has been returned", { icon: "refresh" });
   }
 
   return (
@@ -102,7 +111,8 @@ export default function Scan() {
           <View style={{ gap: spacing.md }} testID="scan-result">
             {imageUri && <Image source={{ uri: imageUri }} style={styles.resultImg} />}
             {result.items.length === 0 && <ErrorState title="No food detected" message="Try a clearer photo, or add items below." />}
-            <ConfirmItems items={result.items} meal={result.meal} imagePath={result.image_path} source="photo" onDone={() => router.replace("/(tabs)/log")} onCancel={() => { setResult(null); setImageUri(null); }} />
+            {!isPremium && <Text style={styles.hint} testID="scan-refund-hint">Start over without logging to get this free scan back.</Text>}
+            <ConfirmItems items={result.items} meal={result.meal} imagePath={result.image_path} scanId={result.scan_id} source="photo" onDone={() => router.replace("/(tabs)/log")} onCancel={startOver} />
           </View>
         )}
       </ScrollView>

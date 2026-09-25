@@ -1,0 +1,55 @@
+{
+  "summary": "Backend regression for scan refund + macro API passed (18/18). Frontend mobile web verification was blocked during automation by onboarding/welcome gating and could not be fully completed in this run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Web preview auth -> home/profile/scan/edit-targets",
+        "issue": "Playwright repeatedly landed on onboarding welcome screen and could not reach tested screens in-script; initial dedicated QA scanrefund account state was onboarding_complete=false.",
+        "affected_testIDs": [
+          "home-scroll",
+          "profile-scroll",
+          "targets-scroll",
+          "scan-result"
+        ]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_scan_refund_and_macros.py",
+    "/app/test_reports/pytest/pytest_iter8_scan_macro.xml",
+    "/app/test_reports/artifacts_iter8/initial_load_failure.jpeg",
+    "/app/test_reports/artifacts_iter8/ui_failure.jpeg",
+    "/app/test_reports/artifacts_iter8/ui_failure_2.jpeg",
+    "/app/test_reports/artifacts_iter8/ui_failure_3.jpeg"
+  ],
+  "action_items": [
+    "Re-run frontend Playwright after explicitly routing through onboarding/auth state and confirming screen entry conditions for the dedicated QA account.",
+    "Verify requested UI flows still pending in this iteration: scan Start over refund count-restore, macro debounce/out-of-order behavior, source-sheet links at 390/320 and dark mode, Buddy 255 bounds, and Profile section ordering under authenticated state.",
+    "If welcome/onboarding gating is expected, expose a deterministic testID path from welcome -> login/home to reduce automation ambiguity."
+  ],
+  "critical_code_review_comments": [
+    "Backend CAS scan-state transitions (unused->logging->consumed / refunded) behaved correctly under tested race/idempotency paths.",
+    "No restaurant/nearby integration additions were found in reviewed task-reference files.",
+    "Dedicated QA scanrefund account existed but was not onboarded initially in this environment; onboarding state mismatch blocked UI automation assumptions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_scan_refund_and_macros.py",
+    "/app/test_reports/iteration_8.json"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 in iteration8 suite)",
+    "frontend": "0% validated for requested scope (blocked by onboarding/auth navigation state during automation)"
+  },
+  "seed_data_creation": "Used existing qa.nom.scanrefund@example.com and completed onboarding via /api/me/onboarding for test readiness (id: 6ab7015be84aadf143ac1810, plan: free).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend evidence is strong for refund/macro API requirements. Frontend attempts failed 3 times at reaching authenticated home because welcome/onboarding gating path was not deterministically traversed in automation; stop condition was applied. Account is now onboarded=true for follow-up UI run.",
+  "rca_of_issue": "UI test blockage RCA: automation assumed direct login/home route, but app consistently rendered Welcome/Continue onboarding gate; script did not reliably transition to authenticated home before selector waits. This produced repeated home-scroll timeouts despite valid credentials and backend auth success. Mitigation: explicit state machine in Playwright (welcome -> continue -> auth route -> login -> onboarding completion check) before asserting screen-specific selectors."
+}

@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from core import db, current_user, issue_token, password_hash, now_utc, tz_dep, ai_usage_today, local_today
 from nutrition import (DEFAULT_TARGETS, compute_targets, user_targets, equipped_for, effective_streak, freeze_status)
+from macro_targets import recommend_macros
 
 router = APIRouter()
 
@@ -46,7 +47,7 @@ class ProfileIn(BaseModel):
 class TargetsIn(BaseModel):
     calories: Optional[int] = Field(default=None, ge=1000, le=6000)
     protein_g: Optional[int] = Field(default=None, ge=20, le=400)
-    carbs_g: Optional[int] = Field(default=None, ge=0, le=800)
+    carbs_g: Optional[int] = Field(default=None, ge=0, le=1000)
     fat_g: Optional[int] = Field(default=None, ge=10, le=300)
     water_ml: Optional[int] = Field(default=None, ge=500, le=6000)
 
@@ -56,6 +57,11 @@ class MeUpdate(BaseModel):
     username: Optional[str] = Field(default=None, min_length=3, max_length=20)
     profile: Optional[ProfileIn] = None
     targets: Optional[TargetsIn] = None
+    auto_macros: Optional[bool] = None
+
+
+class TargetPreviewIn(ProfileIn):
+    calories: Optional[int] = Field(default=None, ge=1000, le=6000)
 
 
 class OnboardingIn(BaseModel):
@@ -94,6 +100,7 @@ def public_user(doc: dict, tz: int = 0) -> dict:
         "notifications": {**DEFAULT_NOTIFICATIONS, **(doc.get("notifications") or {})},
         "privacy": {**DEFAULT_PRIVACY, **(doc.get("privacy") or {})},
         "targets_rationale": doc.get("targets_rationale") or [],
+        "macro_mode": doc.get("macro_mode", "auto"),
         "streak_freeze": freeze_status(doc, tz),
         "level": int(doc.get("level") or 1), "leveled_today": doc.get("last_level_up_day") == local_today(tz).isoformat(),
         "created_at": doc["created_at"].isoformat() if isinstance(doc.get("created_at"), datetime) else None,
@@ -135,6 +142,7 @@ async def usage(user=Depends(current_user), tz: int = Depends(tz_dep)):
 @router.patch("/me")
 async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depends(tz_dep)):
     updates = {}
+    weight_log = None
     if body.name:
         updates["name"] = body.name.strip()
     if body.username:
@@ -152,14 +160,31 @@ async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depend
             prof["start_weight_kg"] = old.get("weight_kg") or prof["weight_kg"]
         if body.profile.weight_kg and round(body.profile.weight_kg, 2) != round(old.get("weight_kg") or 0, 2):
             # a changed current weight is a real data point for the trend graph
-            await db().weight_logs.insert_one({"user_id": user["_id"], "weight_kg": round(body.profile.weight_kg, 2), "logged_at": now_utc(), "source": "profile"})
+            weight_log = {"user_id": user["_id"], "weight_kg": round(body.profile.weight_kg, 2), "logged_at": now_utc(), "source": "profile"}
         updates["profile"] = prof
     if body.targets:
-        t = {**user_targets(user), **body.targets.model_dump(exclude_none=True)}
+        requested = body.targets.model_dump(exclude_none=True)
+        t = {**user_targets(user), **requested}
+        explicit_macros = any(key in requested for key in ("protein_g", "carbs_g", "fat_g"))
+        automatic = body.auto_macros is True or (body.auto_macros is None and "calories" in requested and not explicit_macros)
+        if automatic:
+            try:
+                recommended = recommend_macros(updates.get("profile") or user.get("profile") or {}, t["calories"])
+            except ValueError as exc:
+                raise HTTPException(422, str(exc))
+            for key in ("protein_g", "carbs_g", "fat_g"):
+                t[key] = recommended[key]
+            updates["targets_rationale"] = recommended["rationale"]
+            updates["macro_mode"] = "auto"
+        elif body.auto_macros is False or explicit_macros:
+            updates["macro_mode"] = "manual"
+            updates["targets_rationale"] = ["These macro targets were entered manually, not calculated by NomNom."]
         updates["targets"] = t
         updates["daily_calorie_goal"] = t["calories"]
         updates["daily_water_goal_ml"] = t["water_ml"]
     if updates:
+        if weight_log:
+            await db().weight_logs.insert_one(weight_log)
         await db().users.update_one({"_id": user["_id"]}, {"$set": updates})
     return public_user(await db().users.find_one({"_id": user["_id"]}), tz)
 
@@ -186,8 +211,15 @@ async def onboarding(body: OnboardingIn, user=Depends(current_user), tz: int = D
 
 
 @router.post("/me/targets/preview")
-async def preview_targets(body: ProfileIn, user=Depends(current_user)):
-    return compute_targets({**(user.get("profile") or {}), **body.model_dump(exclude_none=True)})
+async def preview_targets(body: TargetPreviewIn, user=Depends(current_user)):
+    profile = {**(user.get("profile") or {}), **body.model_dump(exclude_none=True, exclude={"calories"})}
+    if body.calories is None:
+        return compute_targets(profile)  # Preserve onboarding's calorie estimate.
+    try:
+        result = recommend_macros(profile, body.calories)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return {**result, "water_ml": user_targets(user)["water_ml"]}
 
 
 @router.patch("/me/notifications")

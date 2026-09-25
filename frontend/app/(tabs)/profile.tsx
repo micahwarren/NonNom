@@ -78,6 +78,25 @@ export default function Profile() {
           {isPremium ? <PremiumBadge /> : <Button title="Go Premium" size="sm" onPress={() => router.push("/paywall")} testID="profile-go-premium" />}
         </View>
 
+        <SectionTitle title="Subscription" />
+        <Card style={{ padding: 0 }} testID="subscription-card">
+          <View style={styles.subscriptionBody}>
+            <View style={styles.subscriptionHeader}>
+              <View style={styles.subscriptionIcon}><Icon name="sparkles" color={colors.premium} size={23} /></View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={styles.big} testID="subscription-plan">{isPremium ? "NomNom Premium" : "NomNom Free"}</Text>
+                <Text style={styles.sub} testID="subscription-status">{isPremium ? "Your premium benefits are active" : "Your everyday nutrition companion"}</Text>
+              </View>
+            </View>
+            {!isPremium && <Text style={styles.sub} testID="subscription-benefits">More AI meal tools and the full Buddy wardrobe.</Text>}
+            <Button title={isPremium ? "Manage subscription" : "Explore Premium"} variant="secondary" testID="manage-subscription" onPress={() => {
+              if (isPremium && Platform.OS !== "web") Linking.openURL(manageUrl).catch(() => toast.show("Couldn't open your subscriptions", { icon: "alert-circle" }));
+              else router.push("/paywall");
+            }} />
+          </View>
+          <Row icon="refresh-outline" title="Restore purchases" testID="profile-restore-purchases" onPress={() => router.push("/paywall")} />
+        </Card>
+
         <SectionTitle title="My Goal" action="Edit Goal" testID="edit-goal" onAction={() => router.push({ pathname: "/onboarding", params: { edit: "1" } })} />
         <Card style={{ gap: 4 }} testID="profile-goal-card">
           <Text style={styles.big}>{GOAL_LABEL[p.goal ?? "maintain"]}</Text>
@@ -105,25 +124,6 @@ export default function Profile() {
             <Row icon="time-outline" title="Simulate next day" subtitle="Preview only — shifts your data back 24h" testID="row-dev-next-day"
               onPress={async () => { try { const r = await api.devAdvanceDay(); await refresh(); toast.show(`It's now the next day (${r.today}). Log something to level up.`, { icon: "sunny" }); } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } }} />
           )}
-        </Card>
-
-        <SectionTitle title="Subscription" />
-        <Card style={{ padding: 0 }} testID="subscription-card">
-          <View style={styles.subscriptionBody}>
-            <View style={styles.subscriptionHeader}>
-              <View style={styles.subscriptionIcon}><Icon name="sparkles" color={colors.premium} size={23} /></View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.big} testID="subscription-plan">{isPremium ? "NomNom Premium" : "NomNom Free"}</Text>
-                <Text style={styles.sub} testID="subscription-status">{isPremium ? "Your premium benefits are active" : "Your everyday nutrition companion"}</Text>
-              </View>
-            </View>
-            {!isPremium && <Text style={styles.sub} testID="subscription-benefits">More AI meal tools and the full Buddy wardrobe.</Text>}
-            <Button title={isPremium ? "Manage subscription" : "Explore Premium"} variant="secondary" testID="manage-subscription" onPress={() => {
-              if (isPremium && Platform.OS !== "web") Linking.openURL(manageUrl).catch(() => toast.show("Couldn't open your subscriptions", { icon: "alert-circle" }));
-              else router.push("/paywall");
-            }} />
-          </View>
-          <Row icon="refresh-outline" title="Restore purchases" testID="profile-restore-purchases" onPress={() => router.push("/paywall")} />
         </Card>
 
         <SectionTitle title="Appearance" />
