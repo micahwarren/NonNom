@@ -7,7 +7,7 @@ export type Targets = { calories: number; protein_g: number; carbs_g: number; fa
 export type Profile = {
   goal?: "lose" | "maintain" | "gain" | "improve"; age?: number; height_cm?: number; weight_kg?: number;
   goal_weight_kg?: number; sex?: "male" | "female" | "unspecified"; activity_level?: string;
-  pace_lb_per_week?: number; diet?: string; allergies?: string[]; units?: "imperial" | "metric";
+  pace_lb_per_week?: number; diet?: string; allergies?: string[]; units?: "imperial" | "metric"; start_weight_kg?: number;
 };
 export type Equipped = { skin: string; hat: string; glasses: string; accessory: string; outfit: string; background: string };
 export type PublicUser = {
@@ -52,7 +52,7 @@ export type SocialPost = { id: string; kind: string; text: string; meta: Record<
 export type ProgressData = {
   range_days: number; series: { date: string; calories: number; protein_g: number; water_ml: number; burned: number; entries: number; weight_kg: number | null }[];
   targets: Targets; avg_calories: number; avg_protein_g: number; protein_pct: number; avg_water_ml: number; days_logged: number; days_in_range: number;
-  weight_start_kg: number | null; weight_end_kg: number | null; streak_days: number; longest_streak: number; goal_weight_kg: number | null;
+  weight_start_kg: number | null; weight_end_kg: number | null; weight_history: { date: string; weight_kg: number; is_start?: boolean }[]; streak_days: number; longest_streak: number; goal_weight_kg: number | null;
 };
 export type WeeklyReport = { week_start: string; week_end: string; headline: string; insights: string[]; this_week: Record<string, number>; last_week: Record<string, number> };
 
@@ -136,6 +136,7 @@ export const api = {
   feed: (cursor?: string | null) => request<{ items: SocialPost[]; next_cursor: string | null; friends_count: number }>(`/social/feed${cursor ? `?cursor=${cursor}` : ""}`),
   react: (postId: string, type: ReactionType) => request<{ my_reaction: ReactionType | null }>(`/social/posts/${postId}/react`, { method: "POST", body: json({ type }) }),
   buddies: () => request<{ me: SocialUser; friends: SocialUser[] }>("/social/buddies"),
+  devAdvanceDay: () => request<{ ok: boolean; today: string; streak_days: number; level: number }>("/dev/advance-day", { method: "POST" }),
   feedMe: (exclude: string[] = []) => request<{ remaining: Targets; suggestions: Suggestion[] }>("/ai/feed-me", { method: "POST", body: json({ exclude }) }),
 
   cosmetics: () => request<{ items: Cosmetic[]; equipped: Equipped; categories: string[] }>("/buddy/cosmetics"),

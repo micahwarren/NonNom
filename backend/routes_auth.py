@@ -146,7 +146,13 @@ async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depend
             raise HTTPException(409, "That username is taken")
         updates["username"] = uname
     if body.profile:
-        prof = {**(user.get("profile") or {}), **body.profile.model_dump(exclude_none=True)}
+        old = user.get("profile") or {}
+        prof = {**old, **body.profile.model_dump(exclude_none=True)}
+        if prof.get("weight_kg") and not prof.get("start_weight_kg"):
+            prof["start_weight_kg"] = old.get("weight_kg") or prof["weight_kg"]
+        if body.profile.weight_kg and round(body.profile.weight_kg, 2) != round(old.get("weight_kg") or 0, 2):
+            # a changed current weight is a real data point for the trend graph
+            await db().weight_logs.insert_one({"user_id": user["_id"], "weight_kg": round(body.profile.weight_kg, 2), "logged_at": now_utc(), "source": "profile"})
         updates["profile"] = prof
     if body.targets:
         t = {**user_targets(user), **body.targets.model_dump(exclude_none=True)}
@@ -161,6 +167,8 @@ async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depend
 @router.post("/me/onboarding")
 async def onboarding(body: OnboardingIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     prof = {**(user.get("profile") or {}), **body.profile.model_dump(exclude_none=True)}
+    if prof.get("weight_kg") and not prof.get("start_weight_kg"):
+        prof["start_weight_kg"] = prof["weight_kg"]  # remembered forever so Progress/Goal can show start → now
     t = compute_targets(prof)
     rationale = t.pop("rationale", [])
     updates = {"profile": prof, "targets": t, "targets_rationale": rationale, "onboarding_complete": True,

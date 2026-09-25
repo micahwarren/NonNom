@@ -35,7 +35,7 @@ export default function ProgressScreen() {
   useEffect(() => { load(); }, [range]);
 
   const hasData = (data?.days_logged ?? 0) > 0;
-  const weights = data?.series.filter(d => d.weight_kg != null) ?? [];
+  const weights = data?.weight_history ?? [];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -52,9 +52,16 @@ export default function ProgressScreen() {
               <View style={styles.cardHead}><Text style={styles.cardLabel}>Weight</Text><Pressable onPress={() => router.push("/weight")} hitSlop={8} testID="log-weight-link"><Text style={styles.link}>Log weight</Text></Pressable></View>
               {weights.length ? (
                 <>
-                  <Text style={styles.bigStat}>{fmtWeight(data.weight_start_kg, units)} <Icon name="arrow-forward" size={16} color={colors.muted} /> {fmtWeight(data.weight_end_kg, units)}</Text>
-                  <LineChart points={weights.map(w => w.weight_kg as number)} color={colors.fat} />
-                  {data.goal_weight_kg && <Text style={styles.sub}>Goal {fmtWeight(data.goal_weight_kg, units)}</Text>}
+                  <View style={styles.cardHead}>
+                    <View><Text style={styles.sub}>Start</Text><Text style={styles.bigStat} testID="weight-start">{fmtWeight(data.weight_start_kg, units)}</Text></View>
+                    <Icon name="arrow-forward" size={18} color={colors.muted} />
+                    <View style={{ alignItems: "flex-end" }}><Text style={styles.sub}>Now</Text><Text style={styles.bigStat} testID="weight-now">{fmtWeight(data.weight_end_kg, units)}</Text></View>
+                  </View>
+                  {data.weight_start_kg != null && data.weight_end_kg != null && Math.abs(data.weight_end_kg - data.weight_start_kg) > 0.05 && (
+                    <Text style={[styles.sub, { color: colors.success, fontWeight: "700" }]} testID="weight-delta">{data.weight_end_kg < data.weight_start_kg ? "Down" : "Up"} {fmtWeight(Math.abs(data.weight_end_kg - data.weight_start_kg), units)} since you started</Text>
+                  )}
+                  <WeightChart points={weights.map(w => w.weight_kg)} labels={weights.map(w => dayName(w.date))} color={colors.fat} goal={data.goal_weight_kg} units={units} />
+                  {data.goal_weight_kg && <Text style={styles.sub}>Goal {fmtWeight(data.goal_weight_kg, units)}{data.weight_end_kg != null ? ` · ${fmtWeight(Math.abs(data.weight_end_kg - data.goal_weight_kg), units)} to go` : ""}</Text>}
                 </>
               ) : <Text style={styles.sub}>{data.weight_end_kg ? `Current ${fmtWeight(data.weight_end_kg, units)}. Log weight regularly to see a trend.` : "Log your weight to see your trend here."}</Text>}
             </Card>
@@ -129,20 +136,34 @@ function BarChart({ series, target, color, labels }: { series: number[]; target:
   );
 }
 
-function LineChart({ points, color }: { points: number[]; color: string }) {
-  const min = Math.min(...points), max = Math.max(...points);
+/** True line chart: dots joined by rotated segments (no SVG dependency). */
+function WeightChart({ points, labels, color, goal, units }: { points: number[]; labels: string[]; color: string; goal: number | null; units: "imperial" | "metric" }) {
+  const [w, setW] = useState(0);
+  const h = 110, padY = 14, padX = 10;
+  const all = goal != null ? [...points, goal] : points;
+  const min = Math.min(...all), max = Math.max(...all);
   const span = Math.max(max - min, 0.5);
-  const h = 80;
+  const n = points.length;
+  const x = (i: number) => n === 1 ? w / 2 : padX + (i / (n - 1)) * (w - padX * 2);
+  const y = (v: number) => padY + (1 - (v - min) / span) * (h - padY * 2);
   return (
-    <View style={{ height: h + 8, flexDirection: "row", alignItems: "flex-end", gap: 2 }}>
-      {points.map((p, i) => {
-        const y = ((p - min) / span) * (h - 12);
-        return (
-          <View key={i} style={{ flex: 1, height: h, justifyContent: "flex-end", alignItems: "center" }}>
-            <View style={{ width: "100%", height: y + 6, borderTopWidth: 2, borderTopColor: color, backgroundColor: color + "14", borderTopLeftRadius: 2, borderTopRightRadius: 2 }} />
-          </View>
-        );
-      })}
+    <View onLayout={e => setW(e.nativeEvent.layout.width)} style={{ height: h + 18 }}>
+      {w > 0 && (
+        <>
+          {goal != null && <View style={{ position: "absolute", left: 0, right: 0, top: y(goal), borderTopWidth: 1, borderColor: colors.success, borderStyle: "dashed", opacity: 0.6 }} />}
+          {points.slice(1).map((p, i) => {
+            const x1 = x(i), y1 = y(points[i]), x2 = x(i + 1), y2 = y(p);
+            const len = Math.hypot(x2 - x1, y2 - y1), ang = Math.atan2(y2 - y1, x2 - x1);
+            return <View key={`s${i}`} style={{ position: "absolute", left: x1, top: y1 - 1, width: len, height: 2.5, backgroundColor: color, borderRadius: 2, transformOrigin: "0 50%", transform: [{ rotate: `${ang}rad` }] }} />;
+          })}
+          {points.map((p, i) => (
+            <View key={`d${i}`} style={{ position: "absolute", left: x(i) - 5, top: y(p) - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: i === n - 1 ? color : colors.surfaceSecondary, borderWidth: 2.5, borderColor: color }} />
+          ))}
+          {n > 1 && [0, n - 1].map(i => (
+            <Text key={`l${i}`} style={{ position: "absolute", top: h + 2, left: i === 0 ? 0 : undefined, right: i === 0 ? undefined : 0, fontSize: fontSize.xs, color: colors.muted, fontWeight: "600" }}>{labels[i]} · {fmtWeight(points[i], units, 1)}</Text>
+          ))}
+        </>
+      )}
     </View>
   );
 }

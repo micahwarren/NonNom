@@ -81,7 +81,7 @@ export default function Profile() {
         <SectionTitle title="My Goal" action="Edit Goal" onAction={() => router.push("/onboarding?edit=1" as any)} />
         <Card style={{ gap: 4 }} testID="goal-card">
           <Text style={styles.big}>{GOAL_LABEL[p.goal ?? "maintain"]}</Text>
-          {p.weight_kg && p.goal_weight_kg && p.goal !== "maintain" && <Text style={styles.sub}>{fmtWeight(p.weight_kg, units, 0)} → {fmtWeight(p.goal_weight_kg, units, 0)}{p.pace_lb_per_week ? ` · ${p.pace_lb_per_week} lb/week` : ""}</Text>}
+          {p.weight_kg && p.goal_weight_kg && p.goal !== "maintain" && <Text style={styles.sub} testID="goal-weights">{fmtWeight(p.start_weight_kg ?? p.weight_kg, units, 0)} → {fmtWeight(p.goal_weight_kg, units, 0)}{p.start_weight_kg && Math.abs(p.weight_kg - p.start_weight_kg) > 0.05 ? ` · now ${fmtWeight(p.weight_kg, units, 0)}` : ""}{p.pace_lb_per_week ? ` · ${p.pace_lb_per_week} lb/week` : ""}</Text>}
           {!p.goal && <Text style={styles.sub}>Set up your goal to personalize your targets.</Text>}
         </Card>
 
@@ -101,6 +101,10 @@ export default function Profile() {
           <Row icon="people-outline" title="Friends" subtitle="Feed, high fives and side-by-side Buddies" onPress={() => router.push("/friends")} testID="row-friends" />
           <Row icon="person-add-outline" title="Invite a Friend" onPress={() => router.push("/friends?tab=invite")} testID="row-invite" />
           <Row icon="bookmark-outline" title="Saved Meals" onPress={() => router.push("/saved")} testID="row-saved" />
+          {process.env.EXPO_PUBLIC_DEV_TOOLS === "1" && (
+            <Row icon="time-outline" title="Simulate next day" subtitle="Preview only — shifts your data back 24h" testID="row-dev-next-day"
+              onPress={async () => { try { const r = await api.devAdvanceDay(); await refresh(); toast.show(`It's now the next day (${r.today}). Log something to level up.`, { icon: "sunny" }); } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } }} />
+          )}
         </Card>
 
         <SectionTitle title="Subscription" />

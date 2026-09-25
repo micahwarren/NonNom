@@ -155,17 +155,22 @@ async def progress(range_: int = Query(default=7, alias="range"), user=Depends(c
     avg_protein = round(sum(d["protein_g"] for d in logged) / n) if n else 0
     avg_water = round(sum(d["water_ml"] for d in series if d["water_ml"] > 0) / max(1, len([d for d in series if d["water_ml"] > 0])))
     in_range = sum(1 for d in logged if abs(d["calories"] - d["burned"] - t["calories"]) <= t["calories"] * 0.1)
-    weights = [d for d in series if d["weight_kg"] is not None]
-    # older weight for start reference if none inside range
-    start_w = weights[0]["weight_kg"] if weights else None
-    if not weights:
-        prev = await db().weight_logs.find_one({"user_id": user["_id"]}, sort=[("logged_at", -1)])
-        start_w = prev["weight_kg"] if prev else None
+    # Weight journey: starting weight (onboarding / first-ever log) → latest log, plus the points inside the range.
+    prof = user.get("profile") or {}
+    first = await db().weight_logs.find_one({"user_id": user["_id"]}, sort=[("logged_at", 1)])
+    latest = await db().weight_logs.find_one({"user_id": user["_id"]}, sort=[("logged_at", -1)])
+    start_w = prof.get("start_weight_kg") or (first["weight_kg"] if first else prof.get("weight_kg"))
+    end_w = latest["weight_kg"] if latest else prof.get("weight_kg")
+    history = [{"date": d["date"], "weight_kg": d["weight_kg"]} for d in series if d["weight_kg"] is not None]
+    start_date = to_local_day(first["logged_at"], tz).isoformat() if first else None
+    if start_w is not None and (not history or ((not start_date or start_date <= history[0]["date"]) and abs(start_w - history[0]["weight_kg"]) > 0.01)):
+        history.insert(0, {"date": start_date or series[0]["date"], "weight_kg": start_w, "is_start": True})
     return {
+        "weight_history": history,
         "range_days": days, "series": series, "targets": t,
         "avg_calories": avg_cal, "avg_protein_g": avg_protein, "protein_pct": round(100 * avg_protein / max(t["protein_g"], 1)) if n else 0,
         "avg_water_ml": avg_water, "days_logged": n, "days_in_range": in_range,
-        "weight_start_kg": start_w, "weight_end_kg": weights[-1]["weight_kg"] if weights else start_w,
+        "weight_start_kg": start_w, "weight_end_kg": end_w,
         "streak_days": effective_streak(user, tz), "longest_streak": int(user.get("longest_streak", 0)),
         "goal_weight_kg": (user.get("profile") or {}).get("goal_weight_kg"),
     }
@@ -414,3 +419,25 @@ async def get_file(path: str, user=Depends(user_from_token_or_header)):
     except Exception:
         raise HTTPException(404, "Image not found")
     return Response(content=content, media_type=ctype)
+
+
+# --- dev tools (preview only; enabled with ENABLE_DEV_TOOLS=true) -------------
+@router.post("/dev/advance-day")
+async def dev_advance_day(user=Depends(current_user), tz: int = Depends(tz_dep)):
+    """Simulates a day passing for THIS user only: shifts all their logs, streak markers and posts back 24h."""
+    import os
+    from datetime import timedelta as _td
+    if os.environ.get("ENABLE_DEV_TOOLS", "").lower() != "true":
+        raise HTTPException(404, "Not found")
+    shift = _td(days=1)
+    for coll, field in (("food_logs", "logged_at"), ("water_logs", "logged_at"), ("exercise_logs", "logged_at"), ("weight_logs", "logged_at"),
+                        ("ai_usage", "created_at"), ("social_posts", "created_at"), ("saved_meals", "created_at")):
+        async for d in db()[coll].find({"user_id": user["_id"]}, {field: 1}):
+            await db()[coll].update_one({"_id": d["_id"]}, {"$set": {field: d[field] - shift}})
+    def back(s):
+        return (date.fromisoformat(s) - shift).isoformat() if s else s
+    upd = {"last_logged_day": back(user.get("last_logged_day")), "last_level_up_day": back(user.get("last_level_up_day")),
+           "last_freeze_day": back(user.get("last_freeze_day"))}
+    await db().users.update_one({"_id": user["_id"]}, {"$set": upd})
+    await db().social_posts.update_many({"user_id": user["_id"]}, [{"$set": {"dedupe_key": {"$concat": ["$dedupe_key", ":shifted"]}}}])
+    return {"ok": True, "today": local_today(tz).isoformat(), "last_logged_day": upd["last_logged_day"], "streak_days": user.get("streak_days", 0), "level": user.get("level", 1)}

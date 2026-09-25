@@ -39,6 +39,8 @@
 - Meal reminders: `src/reminders.ts` local scheduled notifications (expo-notifications) synced from prefs; permission contract w/ Open Settings; web unsupported (message shown)
 - Social (`routes_social.py`): username search, friend request/accept/remove/block, invite codes + referral records (auto-friend on signup w/ code), privacy-aware auto posts (goal/protein/hydration/streak/achievement/cosmetic, deduped per day), paginated feed, reactions (high_five/nice/fire, toggle), side-by-side Buddies. `/friends` screen (Feed · Friends · Buddies · Invite); signup accepts `?ref=CODE`.
 
+- Dev tool: `POST /dev/advance-day` (only when backend `ENABLE_DEV_TOOLS=true`) shifts the current user's data back 24h to simulate the next day; Profile → "Simulate next day" row shown when `EXPO_PUBLIC_DEV_TOOLS=1`. Set both to off/remove for production.
+
 ### Not implemented (next session)
 - Remote push notifications (friend activity / achievements need server push; local reminders are on-device only)
 - Referral rewards (architecture ready: `referrals.reward_granted`)
