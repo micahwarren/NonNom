@@ -1,214 +1,186 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
-import { colors, spacing, radius } from "@/src/theme";
-import { PetCharacter, moodLabel, moodSubtitle } from "@/src/pet-character";
+import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { BuddyAvatar } from "@/src/buddy";
 import { api, DaySummary } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
+import { Button, Card, ErrorState, Icon, MacroCard, ProgressBar, Sheet, Skeleton, useToast } from "@/src/ui";
+import { fmtNum, fmtWater, greeting } from "@/src/units";
+import { track } from "@/src/analytics";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const toast = useToast();
+  const { user, refresh } = useAuth();
   const [summary, setSummary] = useState<DaySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [scoreInfo, setScoreInfo] = useState(false);
+  const units = user?.profile?.units ?? "imperial";
 
   const load = useCallback(async () => {
     setErr(null);
-    try { setSummary(await api.summaryToday()); }
-    catch (e: any) { setErr(e.message ?? "Failed to load"); }
+    try { setSummary(await api.summaryToday()); } catch (e: any) { setErr(e.message ?? "Failed to load"); }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    setLoading(true);
-    load().finally(() => setLoading(false));
-  }, [load]));
+  useFocusEffect(useCallback(() => { load().finally(() => setLoading(false)); refresh(); }, [load]));
 
-  async function onRefresh() {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }
+  async function onRefresh() { setRefreshing(true); await load(); setRefreshing(false); }
 
   async function quickWater(ml: number) {
-    try { await api.logWater(ml); await load(); } catch {}
+    if (!summary) return;
+    setSummary({ ...summary, water_ml: summary.water_ml + ml });
+    try {
+      const r = await api.logWater(ml);
+      track("water_logged", { ml });
+      toast.show(`Added ${ml} ml`, { icon: "water", actionTitle: "Undo", onAction: async () => { await api.undoWater(r.id).catch(() => {}); load(); } });
+      if (r.unlocked?.length) toast.show(`Achievement unlocked: ${r.unlocked[0].name}`, { icon: "trophy" });
+      load();
+    } catch (e: any) { toast.show(e.message ?? "Couldn't log water", { icon: "alert-circle" }); load(); }
   }
 
-  const mood = summary?.pet_mood ?? "neutral";
-  const cal = summary?.calories_in ?? 0;
-  const goal = summary?.calorie_goal ?? user?.daily_calorie_goal ?? 2000;
-  const remaining = Math.max(0, goal - cal + (summary?.calories_burned ?? 0));
-  const waterPct = summary ? Math.min(100, Math.round((summary.water_ml / summary.water_goal) * 100)) : 0;
+  const t = summary?.targets ?? user?.targets ?? { calories: 2000, protein_g: 150, carbs_g: 225, fat_g: 65, water_ml: 2500 };
+  const eaten = summary?.calories_in ?? 0;
+  const burned = summary?.calories_burned ?? 0;
+  const remaining = t.calories - eaten + burned;
+  const streak = summary?.streak_days ?? user?.streak_days ?? 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScrollView
-        testID="home-scroll"
-        contentContainerStyle={[styles.wrap, { paddingTop: insets.top + spacing.md, paddingBottom: spacing.xxxl }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
-      >
-        {/* Streak header */}
+      <ScrollView testID="home-scroll" contentContainerStyle={[styles.wrap, { paddingTop: insets.top + spacing.md }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}>
+        {/* Header */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.hi}>Hey {user?.name || "friend"}!</Text>
-            <Text style={styles.date}>{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hi} testID="greeting">{greeting(user?.name)}</Text>
+            <Text style={styles.date}>{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</Text>
           </View>
-          <View style={styles.streak} testID="streak-chip">
-            <Text style={styles.streakEmoji}>🔥</Text>
-            <Text style={styles.streakText}>{user?.streak_days ?? 0}</Text>
-          </View>
+          <Pressable style={styles.streak} testID="streak-chip" onPress={() => router.push("/achievements")} accessibilityLabel={`${streak} day streak`}>
+            <Icon name="flame" size={16} color={colors.brandPrimary} />
+            <Text style={styles.streakText}>{streak}-day streak</Text>
+          </Pressable>
         </View>
 
-        {/* Pet */}
-        <View style={styles.petSection}>
-          {loading ? (
-            <ActivityIndicator size="large" color={colors.brandPrimary} />
-          ) : (
-            <PetCharacter mood={mood} size={220} />
-          )}
-          <Text style={styles.moodLabel} testID="pet-mood-label">{moodLabel(mood)}</Text>
-          <Text style={styles.moodSub}>{moodSubtitle(mood)}</Text>
-        </View>
+        {/* Buddy */}
+        {loading ? (
+          <View style={{ alignItems: "center", gap: spacing.md, paddingVertical: spacing.md }}><Skeleton height={132} width={132} radius={66} /><Skeleton height={22} width={160} /><Skeleton height={16} width={260} /></View>
+        ) : err ? (
+          <ErrorState message={err} onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} title="Couldn't load your day" />
+        ) : (
+          <Pressable style={styles.buddyRow} onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel="Customize Buddy" testID="buddy-hero">
+            <BuddyAvatar state={summary?.buddy.state ?? "neutral"} equipped={user?.buddy?.equipped} size={132} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={styles.headline} testID="buddy-headline">{summary?.buddy.headline}</Text>
+              <Text style={styles.message} testID="buddy-message">{summary?.buddy.message}</Text>
+              <View style={styles.customizeHint}><Icon name="color-palette-outline" size={13} color={colors.brandPrimary} /><Text style={styles.customizeText}>Customize Buddy</Text></View>
+            </View>
+          </Pressable>
+        )}
 
-        {err && <Text style={styles.err}>{err}</Text>}
-
-        {/* Rings */}
-        <View style={styles.ringsRow}>
-          <StatBubble label="Calories" value={String(cal)} sub={`/ ${goal}`} color={colors.brandPrimary} testID="stat-calories" />
-          <StatBubble label="Remaining" value={String(remaining)} sub="kcal" color={colors.success} testID="stat-remaining" />
-          <StatBubble label="Health" value={summary ? summary.avg_health_score.toFixed(1) : "—"} sub="/ 10" color={colors.brandSecondary} testID="stat-health" />
-        </View>
-
-        {/* Water */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>💧 Water</Text>
-            <Text style={styles.cardValue} testID="water-value">
-              {summary?.water_ml ?? 0} / {summary?.water_goal ?? 2500} ml
-            </Text>
+        {/* Calorie card */}
+        <Card style={styles.calCard} testID="calorie-card">
+          <View style={styles.calTop}>
+            <Text style={styles.cardLabel}>Calories</Text>
+            <Pressable onPress={() => setScoreInfo(true)} style={styles.scoreChip} testID="score-chip" accessibilityLabel="Nutrition score info">
+              <Text style={styles.scoreText}>Nutrition Score {summary?.nutrition_score ?? 0}</Text>
+              <Icon name="information-circle-outline" size={14} color={colors.textSecondary} />
+            </Pressable>
           </View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${waterPct}%`, backgroundColor: colors.info }]} />
+          <View style={styles.calNums}>
+            <View>
+              <Text style={styles.calBig} testID="stat-remaining">{fmtNum(Math.max(0, remaining))}</Text>
+              <Text style={styles.calSub}>{remaining >= 0 ? "remaining" : "remaining"}</Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={styles.calSmall} testID="stat-calories">{fmtNum(eaten)} eaten</Text>
+              {burned > 0 && <Text style={styles.calSmall}>{fmtNum(burned)} burned</Text>}
+              <Text style={styles.calGoal}>Goal {fmtNum(t.calories)} kcal</Text>
+            </View>
           </View>
-          <View style={styles.waterRow}>
-            {[250, 500, 750].map(ml => (
-              <Pressable key={ml} testID={`water-quick-${ml}`} onPress={() => quickWater(ml)} style={({ pressed }) => [styles.waterBtn, pressed && styles.pressed]}>
-                <Text style={styles.waterBtnText}>+{ml}ml</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+          <ProgressBar value={eaten / Math.max(t.calories, 1)} color={remaining < 0 ? colors.carbs : colors.brandPrimary} height={12} />
+          {remaining < 0 && <Text style={styles.overNote}>{fmtNum(-remaining)} kcal over target. Tomorrow's a fresh start.</Text>}
+        </Card>
 
         {/* Macros */}
         <View style={styles.macroRow}>
-          <MacroCard label="Protein" value={summary?.protein_g ?? 0} unit="g" color={colors.brandPrimary} />
-          <MacroCard label="Carbs" value={summary?.carbs_g ?? 0} unit="g" color={colors.brandSecondary} />
-          <MacroCard label="Fat" value={summary?.fat_g ?? 0} unit="g" color={colors.brandTertiary} />
+          <MacroCard label="Protein" value={summary?.protein_g ?? 0} target={t.protein_g} color={colors.protein} testID="macro-protein" />
+          <MacroCard label="Carbs" value={summary?.carbs_g ?? 0} target={t.carbs_g} color={colors.carbs} testID="macro-carbs" />
+          <MacroCard label="Fat" value={summary?.fat_g ?? 0} target={t.fat_g} color={colors.fat} testID="macro-fat" />
         </View>
 
-        {/* Primary CTAs */}
-        <Pressable testID="log-food-cta" style={({ pressed }) => [styles.primaryCta, pressed && styles.pressed]} onPress={() => router.push("/log")}>
-          <Text style={styles.primaryCtaText}>🍽️  Log a meal</Text>
-        </Pressable>
-        <Pressable testID="scan-food-cta" style={({ pressed }) => [styles.secondaryCta, pressed && styles.pressed]} onPress={() => router.push("/scan")}>
-          <Text style={styles.secondaryCtaText}>📸  Scan food with AI</Text>
+        {/* Water */}
+        <Card style={{ gap: spacing.md }} testID="water-card">
+          <View style={styles.calTop}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><Icon name="water" size={16} color={colors.water} /><Text style={styles.cardLabel}>Water</Text></View>
+            <Text style={styles.waterVal} testID="water-value">{fmtWater(summary?.water_ml ?? 0, units)} <Text style={styles.calGoal}>/ {fmtWater(t.water_ml, units)}</Text></Text>
+          </View>
+          <ProgressBar value={(summary?.water_ml ?? 0) / Math.max(t.water_ml, 1)} color={colors.water} height={10} />
+          <View style={styles.waterRow}>
+            {[250, 500, 750].map(ml => (
+              <Pressable key={ml} testID={`water-quick-${ml}`} onPress={() => quickWater(ml)} style={({ pressed }) => [styles.waterBtn, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`Add ${ml} milliliters`}>
+                <Text style={styles.waterBtnText}>+{ml} ml</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+
+        {/* Actions */}
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <Button title="Log Food" icon="add" onPress={() => router.push("/search")} style={{ flex: 1 }} size="lg" testID="log-food-cta" />
+          <Button title="Scan Meal" icon="camera" variant="secondary" onPress={() => router.push("/scan")} style={{ flex: 1 }} size="lg" testID="scan-food-cta" />
+        </View>
+        <Pressable testID="feed-me-cta" onPress={() => router.push("/feed-me")} style={({ pressed }) => [styles.feedMe, pressed && { opacity: 0.9 }]} accessibilityRole="button">
+          <View style={styles.feedIcon}><Icon name="sparkles" size={20} color={colors.onSurfaceInverse} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.feedTitle}>What should I eat?</Text>
+            <Text style={styles.feedSub}>Ideas that fit what you have left today</Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.onSurfaceInverse} />
         </Pressable>
       </ScrollView>
-    </View>
-  );
-}
 
-function StatBubble({ label, value, sub, color, testID }: { label: string; value: string; sub: string; color: string; testID?: string }) {
-  return (
-    <View style={[styles.bubble]} testID={testID}>
-      <View style={[styles.bubbleDot, { backgroundColor: color }]} />
-      <Text style={styles.bubbleVal}>{value}</Text>
-      <Text style={styles.bubbleSub}>{sub}</Text>
-      <Text style={styles.bubbleLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function MacroCard({ label, value, unit, color }: { label: string; value: number; unit: string; color: string }) {
-  return (
-    <View style={styles.macroCard}>
-      <View style={[styles.macroDot, { backgroundColor: color }]} />
-      <Text style={styles.macroVal}>{value.toFixed(0)}{unit}</Text>
-      <Text style={styles.macroLabel}>{label}</Text>
+      <Sheet visible={scoreInfo} onClose={() => setScoreInfo(false)} title="Nutrition Score">
+        <Text style={styles.infoText}>{summary?.score_explanation ?? "Log a meal to start scoring your day."}</Text>
+        <Button title="Got it" onPress={() => setScoreInfo(false)} style={{ marginTop: spacing.md }} />
+      </Sheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: spacing.lg, gap: spacing.md },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
-  hi: { fontSize: 22, fontWeight: "800", color: colors.onSurface },
-  date: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  streak: {
-    flexDirection: "row", alignItems: "center", gap: spacing.xs,
-    backgroundColor: colors.brandSecondary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-  },
-  streakEmoji: { fontSize: 16 },
-  streakText: { fontWeight: "800", fontSize: 16, color: colors.onBrandSecondary },
-
-  petSection: { alignItems: "center", paddingVertical: spacing.md, gap: spacing.sm },
-  moodLabel: { fontSize: 22, fontWeight: "800", color: colors.onSurface, marginTop: spacing.sm },
-  moodSub: { fontSize: 14, color: colors.muted, textAlign: "center", paddingHorizontal: spacing.xl },
-
-  ringsRow: { flexDirection: "row", gap: spacing.sm, justifyContent: "space-between" },
-  bubble: {
-    flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg,
-    padding: spacing.md, alignItems: "flex-start", gap: 2,
-    shadowColor: "#2B2D42", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
-  },
-  bubbleDot: { width: 10, height: 10, borderRadius: 5, marginBottom: spacing.xs },
-  bubbleVal: { fontSize: 22, fontWeight: "800", color: colors.onSurface },
-  bubbleSub: { fontSize: 11, color: colors.muted, marginTop: -2 },
-  bubbleLabel: { fontSize: 11, fontWeight: "600", color: colors.onSurfaceSecondary, marginTop: 4 },
-
-  card: {
-    backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, padding: spacing.lg,
-    gap: spacing.md, shadowColor: "#2B2D42", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
-  },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardTitle: { fontSize: 16, fontWeight: "800", color: colors.onSurface },
-  cardValue: { fontSize: 14, color: colors.muted, fontWeight: "700" },
-  progressTrack: { height: 12, borderRadius: 6, backgroundColor: colors.surfaceTertiary, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: 6 },
-  waterRow: { flexDirection: "row", gap: spacing.sm },
-  waterBtn: {
-    flex: 1, paddingVertical: spacing.md, borderRadius: radius.pill,
-    backgroundColor: colors.surfaceTertiary, alignItems: "center",
-  },
-  waterBtnText: { fontWeight: "800", color: colors.onSurfaceTertiary },
-
+  wrap: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  hi: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.5 },
+  date: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2, fontWeight: "600" },
+  streak: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surfaceTertiary, paddingHorizontal: spacing.md, height: 36, borderRadius: radius.pill },
+  streakText: { fontWeight: "800", fontSize: fontSize.sm, color: colors.onSurface },
+  buddyRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.sm },
+  headline: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface },
+  message: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 20 },
+  customizeHint: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  customizeText: { fontSize: fontSize.xs, fontWeight: "700", color: colors.brandPrimary },
+  calCard: { gap: spacing.md },
+  calTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardLabel: { fontSize: fontSize.sm, fontWeight: "800", color: colors.onSurface, textTransform: "uppercase", letterSpacing: 0.5 },
+  scoreChip: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  scoreText: { fontSize: fontSize.xs, fontWeight: "700", color: colors.textSecondary },
+  calNums: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  calBig: { fontSize: fontSize.hero, fontWeight: "800", color: colors.onSurface, letterSpacing: -1.5, lineHeight: 52 },
+  calSub: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: "600", marginTop: -4 },
+  calSmall: { fontSize: fontSize.sm, color: colors.onSurface, fontWeight: "700" },
+  calGoal: { fontSize: fontSize.xs, color: colors.muted, fontWeight: "600", marginTop: 2 },
+  overNote: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "600" },
   macroRow: { flexDirection: "row", gap: spacing.sm },
-  macroCard: {
-    flex: 1, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg,
-    padding: spacing.md, alignItems: "center", gap: 2,
-  },
-  macroDot: { width: 8, height: 8, borderRadius: 4 },
-  macroVal: { fontSize: 18, fontWeight: "800", color: colors.onSurface, marginTop: spacing.xs },
-  macroLabel: { fontSize: 12, color: colors.muted, fontWeight: "600" },
-
-  primaryCta: {
-    backgroundColor: colors.brandPrimary, paddingVertical: spacing.lg,
-    borderRadius: radius.pill, alignItems: "center", marginTop: spacing.sm,
-    shadowColor: colors.brandPrimary, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 5,
-  },
-  primaryCtaText: { color: colors.onBrandPrimary, fontSize: 17, fontWeight: "800" },
-  secondaryCta: {
-    backgroundColor: colors.surfaceSecondary, paddingVertical: spacing.lg,
-    borderRadius: radius.pill, alignItems: "center",
-    borderWidth: 2, borderColor: colors.brandPrimary,
-  },
-  secondaryCtaText: { color: colors.brandPrimary, fontSize: 16, fontWeight: "800" },
-  pressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
-  err: { color: colors.error, textAlign: "center", fontWeight: "700" },
+  waterVal: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface },
+  waterRow: { flexDirection: "row", gap: spacing.sm },
+  waterBtn: { flex: 1, height: 44, borderRadius: radius.pill, backgroundColor: colors.water + "18", alignItems: "center", justifyContent: "center" },
+  waterBtnText: { fontWeight: "800", color: colors.onSurface, fontSize: fontSize.sm },
+  feedMe: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceInverse, borderRadius: radius.lg, padding: spacing.lg },
+  feedIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  feedTitle: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurfaceInverse },
+  feedSub: { fontSize: fontSize.xs, color: colors.onSurfaceInverse, opacity: 0.75, marginTop: 2 },
+  infoText: { fontSize: fontSize.sm, color: colors.textSecondary, lineHeight: 22 },
 });

@@ -1,237 +1,131 @@
 import React, { useCallback, useState } from "react";
-import {
-  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput,
-  KeyboardAvoidingView, Platform, Modal, Alert,
-} from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
-import { colors, spacing, radius } from "@/src/theme";
-import { api, FoodLog } from "@/src/api";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { api, FoodDay, FoodEntry, Meal } from "@/src/api";
+import { Card, EmptyState, ErrorState, Icon, IconName, IconButton, LoadingState, MEALS } from "@/src/ui";
+import { EditFoodSheet, FoodRow } from "@/src/food-components";
+import { dayName, todayISO } from "@/src/units";
+
+const QUICK: { icon: IconName; label: string; route: string; testID: string }[] = [
+  { icon: "camera", label: "Photo", route: "/scan", testID: "quick-photo" },
+  { icon: "barcode", label: "Barcode", route: "/barcode", testID: "quick-barcode" },
+  { icon: "mic", label: "Describe", route: "/describe", testID: "quick-describe" },
+  { icon: "search", label: "Search", route: "/search", testID: "quick-search" },
+];
 
 export default function LogScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [logs, setLogs] = useState<FoodLog[]>([]);
+  const params = useLocalSearchParams<{ date?: string }>();
+  const date = params.date ?? todayISO();
+  const isToday = date === todayISO();
+  const [day, setDay] = useState<FoodDay | null>(null);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<null | "food" | "exercise">(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState<FoodEntry | null>(null);
 
   const load = useCallback(async () => {
-    try { setLogs(await api.foodToday()); } catch {}
-  }, []);
-  useFocusEffect(useCallback(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]));
+    setErr(null);
+    try { setDay(await api.foodDay(isToday ? undefined : date)); } catch (e: any) { setErr(e.message); }
+  }, [date]);
+  useFocusEffect(useCallback(() => { load().finally(() => setLoading(false)); }, [load]));
 
-  async function del(id: string) {
-    await api.deleteFood(id).catch(() => {});
-    await load();
-  }
+  const goAdd = (meal: Meal) => router.push({ pathname: "/search", params: { meal, date } } as any);
+  const totals = day?.totals;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.title}>Today's log</Text>
-        <Text style={styles.subtitle}>{logs.length} meals</Text>
-      </View>
-
-      <ScrollView testID="log-scroll" contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
-        <View style={styles.actions}>
-          <Pressable testID="scan-btn" style={styles.actionCard} onPress={() => router.push("/scan")}>
-            <Text style={styles.actionEmoji}>📸</Text>
-            <Text style={styles.actionText}>AI Scan</Text>
-          </Pressable>
-          <Pressable testID="manual-btn" style={styles.actionCard} onPress={() => setModal("food")}>
-            <Text style={styles.actionEmoji}>✍️</Text>
-            <Text style={styles.actionText}>Manual</Text>
-          </Pressable>
-          <Pressable testID="exercise-btn" style={styles.actionCard} onPress={() => setModal("exercise")}>
-            <Text style={styles.actionEmoji}>🏃</Text>
-            <Text style={styles.actionText}>Exercise</Text>
-          </Pressable>
+      <ScrollView contentContainerStyle={[styles.wrap, { paddingTop: insets.top + spacing.md }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.brandPrimary} />} testID="log-scroll">
+        <View style={styles.headerRow}>
+          {!isToday && <IconButton name="chevron-back" onPress={() => router.back()} label="Back" />}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{isToday ? "Today's Log" : `${dayName(date)}'s Log`}</Text>
+            <Text style={styles.sub}>{new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</Text>
+          </View>
         </View>
 
-        {loading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} /> : (
-          logs.length === 0 ? (
-            <View style={styles.empty} testID="log-empty">
-              <Text style={styles.emptyEmoji}>🍽️</Text>
-              <Text style={styles.emptyTitle}>Your plate is empty</Text>
-              <Text style={styles.emptySub}>Log your first meal to feed your buddy</Text>
-            </View>
-          ) : (
-            <View style={{ gap: spacing.sm }}>
-              {logs.map(l => (
-                <View key={l.id} style={styles.logCard} testID={`food-log-${l.id}`}>
-                  <View style={styles.logIconWrap}>
-                    <Text style={{ fontSize: 28 }}>{l.source === "photo" ? "📸" : "🍽️"}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.logName}>{l.name}</Text>
-                    <Text style={styles.logMacros}>
-                      P {l.protein_g.toFixed(0)}  ·  C {l.carbs_g.toFixed(0)}  ·  F {l.fat_g.toFixed(0)}
-                    </Text>
-                    <View style={styles.healthBar}>
-                      <View style={[styles.healthBarFill, { width: `${l.health_score * 10}%`, backgroundColor: healthColor(l.health_score) }]} />
+        <Card style={styles.summary} testID="log-summary">
+          <Stat label="Calories" value={`${totals?.calories ?? 0}`} unit="kcal" />
+          <View style={styles.vdiv} />
+          <Stat label="Protein" value={`${Math.round(totals?.protein_g ?? 0)}`} unit="g" color={colors.protein} />
+          <View style={styles.vdiv} />
+          <Stat label="Meals" value={`${day?.count ?? 0}`} unit={day?.count === 1 ? "item" : "items"} />
+        </Card>
+
+        {isToday && (
+          <View style={styles.quickRow}>
+            {QUICK.map(q => (
+              <Pressable key={q.label} testID={q.testID} onPress={() => router.push(q.route as any)} style={({ pressed }) => [styles.quick, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={q.label}>
+                <View style={styles.quickIcon}><Icon name={q.icon} size={20} color={colors.brandPrimary} /></View>
+                <Text style={styles.quickLabel}>{q.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {loading ? <LoadingState rows={3} /> : err ? <ErrorState message={err} onRetry={load} /> : (
+          <>
+            {day && day.count === 0 && (
+              <EmptyState icon="restaurant-outline" title="Nothing logged yet" message={isToday ? "Log your first meal and Buddy will start tracking your day." : "No entries were logged on this day."} ctaTitle={isToday ? "Log your first meal" : undefined} onCta={() => goAdd("breakfast")} compact />
+            )}
+            {MEALS.map(m => {
+              const items = day?.meals[m.value] ?? [];
+              const kcal = items.reduce((a, i) => a + i.calories, 0);
+              return (
+                <Card key={m.value} style={styles.mealCard} testID={`meal-section-${m.value}`}>
+                  <View style={styles.mealHeader}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Icon name={m.icon} size={18} color={colors.textSecondary} />
+                      <Text style={styles.mealTitle}>{m.label}</Text>
                     </View>
+                    <Text style={styles.mealKcal}>{items.length ? `${kcal} kcal` : ""}</Text>
                   </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.logCal}>{l.calories}</Text>
-                    <Text style={styles.logCalUnit}>kcal</Text>
-                    <Pressable testID={`delete-${l.id}`} onPress={() => del(l.id)}>
-                      <Text style={styles.del}>✕</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )
+                  {items.map(it => <FoodRow key={it.id} item={it} onPress={() => setEditing(it)} testID={`food-row-${it.id}`} />)}
+                  <Pressable onPress={() => goAdd(m.value)} style={({ pressed }) => [styles.addFood, pressed && { opacity: 0.7 }]} testID={`add-food-${m.value}`} accessibilityRole="button" accessibilityLabel={`Add food to ${m.label}`}>
+                    <Icon name="add-circle" size={20} color={colors.brandPrimary} />
+                    <Text style={styles.addFoodText}>Add Food</Text>
+                  </Pressable>
+                </Card>
+              );
+            })}
+          </>
         )}
       </ScrollView>
-
-      <FoodModal visible={modal === "food"} onClose={() => setModal(null)} onSaved={load} />
-      <ExerciseModal visible={modal === "exercise"} onClose={() => setModal(null)} onSaved={load} />
+      <EditFoodSheet item={editing} onClose={() => setEditing(null)} onChanged={load} />
     </View>
   );
 }
 
-function healthColor(s: number) {
-  if (s >= 7) return colors.success;
-  if (s >= 4) return colors.warning;
-  return colors.error;
-}
-
-function FoodModal({ visible, onClose, onSaved }: any) {
-  const [name, setName] = useState("");
-  const [calories, setCalories] = useState("");
-  const [protein, setProtein] = useState("");
-  const [carbs, setCarbs] = useState("");
-  const [fat, setFat] = useState("");
-  const [health, setHealth] = useState(5);
-  const [busy, setBusy] = useState(false);
-
-  async function submit() {
-    if (!name || !calories) return Alert.alert("Missing", "Enter name and calories");
-    setBusy(true);
-    try {
-      await api.logFoodManual({
-        name, calories: Number(calories),
-        protein_g: Number(protein) || 0, carbs_g: Number(carbs) || 0, fat_g: Number(fat) || 0,
-        health_score: health,
-      });
-      setName(""); setCalories(""); setProtein(""); setCarbs(""); setFat(""); setHealth(5);
-      onSaved(); onClose();
-    } catch (e: any) { Alert.alert("Error", e.message ?? "Failed"); }
-    finally { setBusy(false); }
-  }
-
+function Stat({ label, value, unit, color = colors.onSurface }: { label: string; value: string; unit: string; color?: string }) {
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1, justifyContent: "flex-end" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} onPress={onClose} />
-        <View style={styles.sheet}>
-          <View style={styles.grabber} />
-          <Text style={styles.sheetTitle}>Log a meal</Text>
-          <ScrollView contentContainerStyle={{ gap: spacing.md, paddingBottom: spacing.xl }} keyboardShouldPersistTaps="handled">
-            <Field label="Food name" value={name} onChange={setName} testID="manual-name" />
-            <View style={{ flexDirection: "row", gap: spacing.sm }}>
-              <View style={{ flex: 1 }}><Field label="Calories" value={calories} onChange={setCalories} kb="numeric" testID="manual-cal" /></View>
-              <View style={{ flex: 1 }}><Field label="Protein (g)" value={protein} onChange={setProtein} kb="numeric" testID="manual-protein" /></View>
-            </View>
-            <View style={{ flexDirection: "row", gap: spacing.sm }}>
-              <View style={{ flex: 1 }}><Field label="Carbs (g)" value={carbs} onChange={setCarbs} kb="numeric" testID="manual-carbs" /></View>
-              <View style={{ flex: 1 }}><Field label="Fat (g)" value={fat} onChange={setFat} kb="numeric" testID="manual-fat" /></View>
-            </View>
-            <Text style={styles.label}>How healthy? {health}/10</Text>
-            <View style={styles.healthPicker}>
-              {[0,1,2,3,4,5,6,7,8,9,10].map(v => (
-                <Pressable key={v} testID={`health-${v}`} onPress={() => setHealth(v)} style={[styles.healthDot, { backgroundColor: health === v ? colors.brandPrimary : colors.surfaceTertiary }]}>
-                  <Text style={{ color: health === v ? colors.onBrandPrimary : colors.onSurfaceTertiary, fontWeight: "800" }}>{v}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable testID="manual-save" style={styles.saveBtn} onPress={submit} disabled={busy}>
-              {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.saveText}>Save meal</Text>}
-            </Pressable>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function ExerciseModal({ visible, onClose, onSaved }: any) {
-  const [activity, setActivity] = useState("");
-  const [duration, setDuration] = useState("");
-  const [burned, setBurned] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit() {
-    if (!activity || !duration || !burned) return Alert.alert("Missing", "Fill all fields");
-    setBusy(true);
-    try {
-      await api.logExercise(activity, Number(duration), Number(burned));
-      setActivity(""); setDuration(""); setBurned("");
-      onSaved(); onClose();
-    } catch (e: any) { Alert.alert("Error", e.message ?? "Failed"); }
-    finally { setBusy(false); }
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1, justifyContent: "flex-end" }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} onPress={onClose} />
-        <View style={styles.sheet}>
-          <View style={styles.grabber} />
-          <Text style={styles.sheetTitle}>Log exercise</Text>
-          <View style={{ gap: spacing.md }}>
-            <Field label="Activity" value={activity} onChange={setActivity} testID="ex-activity" />
-            <Field label="Duration (min)" value={duration} onChange={setDuration} kb="numeric" testID="ex-duration" />
-            <Field label="Calories burned" value={burned} onChange={setBurned} kb="numeric" testID="ex-burned" />
-            <Pressable testID="ex-save" style={styles.saveBtn} onPress={submit} disabled={busy}>
-              {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.saveText}>Save exercise</Text>}
-            </Pressable>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function Field({ label, value, onChange, kb, testID }: any) {
-  return (
-    <View style={{ gap: 4 }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput testID={testID} value={value} onChangeText={onChange} keyboardType={kb ?? "default"} style={styles.input} placeholderTextColor={colors.muted} />
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <Text style={[styles.statV, { color }]}>{value}<Text style={styles.statU}> {unit}</Text></Text>
+      <Text style={styles.statL}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: colors.surface },
-  title: { fontSize: 28, fontWeight: "800", color: colors.onSurface },
-  subtitle: { fontSize: 13, color: colors.muted, marginTop: 2 },
-  actions: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.lg },
-  actionCard: { flex: 1, backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderRadius: radius.lg, alignItems: "center", gap: spacing.xs },
-  actionEmoji: { fontSize: 28 },
-  actionText: { fontWeight: "800", color: colors.onSurface },
-  empty: { alignItems: "center", padding: spacing.xxxl, gap: spacing.sm },
-  emptyEmoji: { fontSize: 60 },
-  emptyTitle: { fontSize: 20, fontWeight: "800", color: colors.onSurface },
-  emptySub: { fontSize: 14, color: colors.muted, textAlign: "center" },
-  logCard: { flexDirection: "row", gap: spacing.md, backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderRadius: radius.lg, alignItems: "center" },
-  logIconWrap: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  logName: { fontSize: 15, fontWeight: "800", color: colors.onSurface },
-  logMacros: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  healthBar: { height: 4, borderRadius: 2, backgroundColor: colors.surfaceTertiary, marginTop: spacing.xs, overflow: "hidden" },
-  healthBarFill: { height: "100%" },
-  logCal: { fontSize: 18, fontWeight: "800", color: colors.brandPrimary },
-  logCalUnit: { fontSize: 10, color: colors.muted },
-  del: { fontSize: 18, color: colors.muted, padding: 4, marginTop: 4 },
-
-  sheet: { backgroundColor: colors.surface, padding: spacing.lg, borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: "85%" },
-  grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: "center", marginBottom: spacing.md },
-  sheetTitle: { fontSize: 22, fontWeight: "800", color: colors.onSurface, marginBottom: spacing.lg },
-  label: { fontSize: 13, fontWeight: "600", color: colors.onSurfaceSecondary },
-  input: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 16, color: colors.onSurface },
-  healthPicker: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-  healthDot: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  saveBtn: { backgroundColor: colors.brandPrimary, paddingVertical: spacing.lg, borderRadius: radius.pill, alignItems: "center", marginTop: spacing.md },
-  saveText: { color: colors.onBrandPrimary, fontWeight: "800", fontSize: 16 },
+  wrap: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  title: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.5 },
+  sub: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: "600", marginTop: 2 },
+  summary: { flexDirection: "row", alignItems: "center", paddingVertical: spacing.md },
+  vdiv: { width: 1, height: 32, backgroundColor: colors.divider },
+  statV: { fontSize: fontSize.xl, fontWeight: "800" },
+  statU: { fontSize: fontSize.xs, color: colors.muted, fontWeight: "600" },
+  statL: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 2 },
+  quickRow: { flexDirection: "row", gap: spacing.sm },
+  quick: { flex: 1, alignItems: "center", gap: 6, paddingVertical: spacing.sm },
+  quickIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  quickLabel: { fontSize: fontSize.xs, fontWeight: "700", color: colors.onSurface },
+  mealCard: { padding: 0, overflow: "hidden" },
+  mealHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  mealTitle: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface },
+  mealKcal: { fontSize: fontSize.sm, fontWeight: "700", color: colors.textSecondary },
+  addFood: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 48 },
+  addFoodText: { fontWeight: "700", color: colors.brandPrimary, fontSize: fontSize.sm },
 });

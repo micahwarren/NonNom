@@ -1,12 +1,22 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { Platform, Text, View, StyleSheet } from "react-native";
-import { colors, spacing } from "@/src/theme";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { colors, shadow } from "@/src/theme";
+import { Icon, IconName } from "@/src/ui";
+import { useAddSheet } from "@/src/add-sheet";
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
+function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
+  return <Icon name={name} size={24} color={focused ? colors.brandPrimary : colors.muted} />;
+}
+
+function AddButton() {
+  const { open } = useAddSheet();
   return (
-    <View style={styles.iconWrap}>
-      <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{label}</Text>
+    <View style={styles.addWrap} pointerEvents="box-none">
+      <Pressable testID="tab-add" onPress={open} accessibilityRole="button" accessibilityLabel="Add"
+        style={({ pressed }) => [styles.addBtn, pressed && { transform: [{ scale: 0.94 }] }]}>
+        <Icon name="add" size={30} color={colors.onBrandPrimary} />
+      </Pressable>
     </View>
   );
 }
@@ -18,36 +28,20 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "700", marginBottom: 4 },
-        tabBarStyle: {
-          backgroundColor: colors.surfaceSecondary,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          ...(Platform.OS === "web" ? { height: 64 } : {}),
-        },
-        tabBarItemStyle: { alignSelf: "center" },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+        tabBarStyle: { backgroundColor: colors.surfaceSecondary, borderTopColor: colors.border, borderTopWidth: 1, height: Platform.OS === "web" ? 64 : 84, paddingTop: 6 },
       }}
     >
-      <Tabs.Screen name="index" options={{
-        title: "Buddy",
-        tabBarIcon: ({ focused }) => <TabIcon label="🐣" focused={focused} />,
-      }} />
-      <Tabs.Screen name="log" options={{
-        title: "Log",
-        tabBarIcon: ({ focused }) => <TabIcon label="🍽️" focused={focused} />,
-      }} />
-      <Tabs.Screen name="stats" options={{
-        title: "Stats",
-        tabBarIcon: ({ focused }) => <TabIcon label="📊" focused={focused} />,
-      }} />
-      <Tabs.Screen name="profile" options={{
-        title: "You",
-        tabBarIcon: ({ focused }) => <TabIcon label="👤" focused={focused} />,
-      }} />
+      <Tabs.Screen name="index" options={{ title: "Buddy", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "happy" : "happy-outline"} focused={focused} /> }} />
+      <Tabs.Screen name="log" options={{ title: "Log", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "restaurant" : "restaurant-outline"} focused={focused} /> }} />
+      <Tabs.Screen name="add" options={{ title: "", tabBarButton: () => <AddButton /> }} listeners={{ tabPress: e => e.preventDefault() }} />
+      <Tabs.Screen name="progress" options={{ title: "Progress", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "stats-chart" : "stats-chart-outline"} focused={focused} /> }} />
+      <Tabs.Screen name="profile" options={{ title: "You", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "person" : "person-outline"} focused={focused} /> }} />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  iconWrap: { alignItems: "center", justifyContent: "center", paddingTop: spacing.xs },
+  addWrap: { flex: 1, alignItems: "center", justifyContent: "flex-start" },
+  addBtn: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", marginTop: -22, borderWidth: 4, borderColor: colors.surfaceSecondary, ...shadow.brand },
 });

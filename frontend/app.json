@@ -21,7 +21,10 @@
         "backgroundColor": "#FFF9F5"
       },
       "package": "com.emergent.healthbuddy.cfwaxa",
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -56,7 +59,9 @@
           "photosPermission": "Pick a food photo to log nutrition",
           "cameraPermission": "Scan meals to log nutrition instantly"
         }
-      ]
+      ],
+      "expo-sharing",
+      "@react-native-vector-icons/ionicons"
     ],
     "experiments": {
       "typedRoutes": true

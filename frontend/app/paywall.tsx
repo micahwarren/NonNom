@@ -1,105 +1,162 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useEffect, useState } from "react";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, spacing, radius } from "@/src/theme";
-import { PetCharacter } from "@/src/pet-character";
-import { api } from "@/src/api";
+import type { PurchasesPackage } from "react-native-purchases";
+import { colors, fontSize, radius, spacing } from "@/src/theme";
 import { useAuth } from "@/src/auth-context";
+import { rcSimulated, useSubscription } from "@/src/revenuecat";
+import { BuddyAvatar } from "@/src/buddy";
+import { Button, Card, Icon, ScreenHeader, Sheet, Skeleton, useToast } from "@/src/ui";
+import { track } from "@/src/analytics";
+
+const BENEFITS = [
+  "Expanded AI meal scans and Describe Meal", "Full Buddy customization", "Premium outfits, skins and accessories",
+  "Advanced progress insights", "Buddy's full weekly report", "AI meal suggestions", "Future premium features",
+];
+const LEGAL = { terms: process.env.EXPO_PUBLIC_TERMS_URL, privacy: process.env.EXPO_PUBLIC_PRIVACY_URL };
 
 export default function Paywall() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { setUser } = useAuth();
-  const [plan, setPlan] = useState<"premium_monthly" | "premium_yearly">("premium_yearly");
-  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const { user, purchaseIdentityError } = useAuth();
+  const { offerings, offeringsError, isSubscribed, identityReady, isLoading, purchase, restore, isPurchasing, isRestoring, refetchCustomerInfo } = useSubscription();
+  const [selected, setSelected] = useState<"annual" | "monthly">("annual");
+  const [confirm, setConfirm] = useState<PurchasesPackage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [restoreResult, setRestoreResult] = useState<"none" | "found" | null>(null);
 
-  async function subscribe() {
-    setBusy(true);
+  useEffect(() => { track("paywall_viewed"); }, []);
+
+  const pkgs = offerings?.current?.availablePackages ?? [];
+  const annual = pkgs.find(p => p.identifier === "$rc_annual" || p.packageType === "ANNUAL");
+  const monthly = pkgs.find(p => p.identifier === "$rc_monthly" || p.packageType === "MONTHLY");
+  const chosen = selected === "annual" ? annual : monthly;
+  const savings = annual && monthly && monthly.product.price > 0 ? Math.round((1 - annual.product.price / (monthly.product.price * 12)) * 100) : null;
+
+  async function buy(pkg: PurchasesPackage) {
+    setConfirm(null); setError(null);
     try {
-      const u = await api.mockUpgrade(plan);
-      setUser(u);
-      router.replace("/(tabs)");
-    } finally { setBusy(false); }
+      await purchase(pkg);
+      track("subscription_started", { package: pkg.identifier });
+      toast.show("Welcome to NomNom Premium", { icon: "sparkles" });
+      router.back();
+    } catch (e: any) {
+      if (e?.userCancelled) return;
+      if (String(e?.message).includes("identity_not_ready")) setError("We couldn't link this purchase to your account yet. Please sign out and back in, then try again.");
+      else setError("We couldn't complete your purchase. " + (e?.message ?? "Please try again."));
+    }
+  }
+  async function doRestore() {
+    setError(null); setRestoreResult(null);
+    try {
+      const info = await restore();
+      const active = info.entitlements.active["pro"] !== undefined;
+      setRestoreResult(active ? "found" : "none");
+      if (active) { track("subscription_restored"); toast.show("Premium restored", { icon: "sparkles" }); }
+    } catch (e: any) { setError("Restore failed. " + (e?.message ?? "Please try again.")); }
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.brandPrimary }}>
-      <ScrollView contentContainerStyle={[styles.wrap, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xl }]}>
-        <Pressable testID="paywall-close" onPress={() => router.back()} style={styles.close}>
-          <Text style={styles.closeText}>✕</Text>
-        </Pressable>
-
-        <View style={styles.hero}>
-          <PetCharacter mood="glowing" size={180} />
-          <Text style={styles.title}>Go Premium ⭐</Text>
-          <Text style={styles.subtitle}>Unlock everything your buddy needs to thrive</Text>
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <ScreenHeader title="" onBack={() => router.back()} close />
+      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl }}>
+        <View style={{ alignItems: "center", gap: spacing.sm }}>
+          <BuddyAvatar state="celebrating" equipped={{ ...(user?.buddy?.equipped ?? {}), hat: "hat_crown", background: "bg_confetti" }} size={140} />
+          <Text style={styles.title}>Meet NomNom Premium</Text>
+          <Text style={styles.sub}>Get more from your Buddy and your nutrition goals.</Text>
         </View>
 
-        <View style={styles.features}>
-          {[
-            ["📸", "Unlimited AI food scans", "Free plan: only 3/day"],
-            ["🎨", "Exclusive pet skins & outfits", "Customize your buddy"],
-            ["📊", "Advanced weekly insights", "Trends, macros, patterns"],
-            ["🏆", "Streak protection", "Never lose a streak"],
-            ["💝", "No ads. Ever.", "Peace of mind"],
-          ].map(([e, t, s]) => (
-            <View key={t} style={styles.featureRow}>
-              <Text style={styles.featureEmoji}>{e}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>{t}</Text>
-                <Text style={styles.featureSub}>{s}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
+        {isSubscribed ? (
+          <Card style={{ alignItems: "center", gap: spacing.sm }} testID="already-premium">
+            <Icon name="checkmark-circle" size={32} color={colors.success} />
+            <Text style={styles.planTitle}>You're on Premium</Text>
+            <Text style={styles.sub}>Manage or cancel any time from your store subscriptions.</Text>
+            <Button title="Manage Subscription" variant="secondary" onPress={() => Linking.openURL(getManageUrl())} />
+          </Card>
+        ) : (
+          <>
+            <Card style={{ gap: spacing.sm }}>
+              {BENEFITS.map(b => <View key={b} style={styles.benefit}><Icon name="checkmark-circle" size={18} color={colors.success} /><Text style={styles.benefitText}>{b}</Text></View>)}
+            </Card>
 
-        <View style={styles.plans}>
-          <Pressable testID="plan-yearly" onPress={() => setPlan("premium_yearly")} style={[styles.planCard, plan === "premium_yearly" && styles.planActive]}>
-            <View style={styles.saveBadge}><Text style={styles.saveBadgeText}>SAVE 40%</Text></View>
-            <Text style={styles.planName}>Yearly</Text>
-            <Text style={styles.planPrice}>$47.99</Text>
-            <Text style={styles.planPer}>/year · $4/mo</Text>
-          </Pressable>
-          <Pressable testID="plan-monthly" onPress={() => setPlan("premium_monthly")} style={[styles.planCard, plan === "premium_monthly" && styles.planActive]}>
-            <Text style={styles.planName}>Monthly</Text>
-            <Text style={styles.planPrice}>$6.99</Text>
-            <Text style={styles.planPer}>/month</Text>
-          </Pressable>
-        </View>
+            {isLoading ? <View style={{ gap: spacing.sm }}><Skeleton height={84} radius={radius.lg} /><Skeleton height={84} radius={radius.lg} /></View>
+              : !pkgs.length ? (
+                <Card style={{ alignItems: "center", gap: spacing.xs }} testID="offerings-unavailable">
+                  <Icon name="cloud-offline-outline" size={26} color={colors.muted} />
+                  <Text style={styles.sub}>Subscription options are unavailable right now. Please try again later.</Text>
+                  {offeringsError && <Text style={styles.err}>{offeringsError.message}</Text>}
+                </Card>
+              ) : (
+                <View style={{ gap: spacing.sm }}>
+                  {annual && <PlanRow pkg={annual} label="Yearly" selected={selected === "annual"} onPress={() => setSelected("annual")} badge={savings && savings > 0 ? `Best value · save ${savings}%` : "Best value"} sub={`${annual.product.priceString}/year`} testID="plan-annual" />}
+                  {monthly && <PlanRow pkg={monthly} label="Monthly" selected={selected === "monthly"} onPress={() => setSelected("monthly")} sub={`${monthly.product.priceString}/month`} testID="plan-monthly" />}
+                </View>
+              )}
 
-        <Pressable testID="paywall-subscribe" style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]} onPress={subscribe} disabled={busy}>
-          {busy ? <ActivityIndicator color={colors.brandPrimary} /> : <Text style={styles.ctaText}>Start Premium</Text>}
-        </Pressable>
-        <Text style={styles.fine}>Cancel anytime · Instant activation (demo mode)</Text>
+            {purchaseIdentityError && <View style={styles.banner}><Icon name="alert-circle" size={16} color={colors.error} /><Text style={styles.bannerText}>Purchases are temporarily unavailable: account link failed. Sign out and back in to retry.</Text></View>}
+            {rcSimulated && pkgs.length > 0 && <Text style={styles.simulated}>Preview mode: purchases here are simulated through RevenueCat's Test Store. Real billing happens in the App Store / Play Store build.</Text>}
+            {error && <Text style={styles.err} testID="purchase-error">{error}</Text>}
+
+            <Button title="Start Premium" size="lg" onPress={() => chosen && setConfirm(chosen)} disabled={!chosen || !identityReady || isPurchasing} loading={isPurchasing} testID="start-premium" />
+            <Text style={styles.fine}>Auto-renews until cancelled. Cancel any time in your store account settings. Prices shown in your local currency by the store.</Text>
+          </>
+        )}
+
+        <Button title={isRestoring ? "Connecting to store…" : "Restore Purchases"} variant="ghost" onPress={doRestore} loading={isRestoring} testID="restore-purchases" />
+        {restoreResult === "none" && <Text style={styles.sub} testID="restore-none">No previous purchases found for this account.</Text>}
+        {restoreResult === "found" && <Text style={[styles.sub, { color: colors.success }]} testID="restore-found">Premium restored.</Text>}
+        <View style={styles.legal}>
+          <Pressable onPress={() => LEGAL.terms ? Linking.openURL(LEGAL.terms) : router.push("/legal?doc=terms" as any)}><Text style={styles.legalText}>Terms</Text></Pressable>
+          <Text style={styles.legalText}>·</Text>
+          <Pressable onPress={() => LEGAL.privacy ? Linking.openURL(LEGAL.privacy) : router.push("/legal?doc=privacy" as any)}><Text style={styles.legalText}>Privacy Policy</Text></Pressable>
+        </View>
       </ScrollView>
+
+      <Sheet visible={!!confirm} onClose={() => setConfirm(null)} title="Confirm purchase">
+        <Text style={styles.confirmText}>{confirm?.product.title || "NomNom Premium"} — {confirm?.product.priceString}{confirm?.packageType === "ANNUAL" ? "/year" : "/month"}</Text>
+        {rcSimulated && <Text style={styles.simulated}>This is a simulated Test Store purchase.</Text>}
+        <Button title="Confirm" onPress={() => confirm && buy(confirm)} style={{ marginTop: spacing.sm }} testID="confirm-purchase" />
+        <Button title="Cancel" variant="ghost" onPress={() => setConfirm(null)} />
+      </Sheet>
     </View>
   );
 }
 
+function PlanRow({ pkg, label, selected, onPress, badge, sub, testID }: { pkg: PurchasesPackage; label: string; selected: boolean; onPress: () => void; badge?: string; sub: string; testID?: string }) {
+  return (
+    <Pressable onPress={onPress} testID={testID} accessibilityRole="radio" accessibilityState={{ selected }} style={[styles.plan, selected && styles.planOn]}>
+      <View style={[styles.radio, selected && { borderColor: colors.brandPrimary }]}>{selected && <View style={styles.radioDot} />}</View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.planTitle}>{label}</Text>
+        <Text style={styles.sub}>{sub}</Text>
+      </View>
+      {badge && <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View>}
+    </Pressable>
+  );
+}
+
+function getManageUrl() {
+  return Platform.OS === "ios" ? "https://apps.apple.com/account/subscriptions" : "https://play.google.com/store/account/subscriptions";
+}
+
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: spacing.lg, gap: spacing.lg },
-  close: { alignSelf: "flex-end", width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
-  closeText: { color: colors.onBrandPrimary, fontSize: 18, fontWeight: "800" },
-  hero: { alignItems: "center", gap: spacing.sm },
-  title: { fontSize: 32, fontWeight: "800", color: colors.onBrandPrimary, marginTop: spacing.md },
-  subtitle: { fontSize: 15, color: colors.onBrandPrimary, opacity: 0.9, textAlign: "center", paddingHorizontal: spacing.lg },
-  features: { backgroundColor: "rgba(255,255,255,0.15)", borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
-  featureRow: { flexDirection: "row", gap: spacing.md, alignItems: "center" },
-  featureEmoji: { fontSize: 26 },
-  featureTitle: { color: colors.onBrandPrimary, fontWeight: "800", fontSize: 15 },
-  featureSub: { color: colors.onBrandPrimary, opacity: 0.85, fontSize: 12, marginTop: 2 },
-
-  plans: { flexDirection: "row", gap: spacing.sm },
-  planCard: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: radius.lg, padding: spacing.lg, borderWidth: 2, borderColor: "transparent", position: "relative" },
-  planActive: { backgroundColor: colors.onBrandPrimary, borderColor: colors.brandSecondary },
-  saveBadge: { position: "absolute", top: -8, right: -8, backgroundColor: colors.brandSecondary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill },
-  saveBadgeText: { color: colors.onBrandSecondary, fontWeight: "800", fontSize: 10 },
-  planName: { color: colors.onSurface, fontWeight: "800", fontSize: 14 },
-  planPrice: { color: colors.onSurface, fontWeight: "800", fontSize: 26, marginTop: spacing.xs },
-  planPer: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-
-  cta: { backgroundColor: colors.onBrandPrimary, paddingVertical: spacing.lg, borderRadius: radius.pill, alignItems: "center" },
-  ctaText: { color: colors.brandPrimary, fontWeight: "800", fontSize: 17 },
-  fine: { color: colors.onBrandPrimary, opacity: 0.7, textAlign: "center", fontSize: 12 },
+  title: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, textAlign: "center", letterSpacing: -0.5 },
+  sub: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: "center", lineHeight: 20 },
+  benefit: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  benefitText: { fontSize: fontSize.sm, fontWeight: "600", color: colors.onSurface, flex: 1 },
+  plan: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.border, minHeight: 76 },
+  planOn: { borderColor: colors.brandPrimary, backgroundColor: colors.surfaceTertiary },
+  planTitle: { fontSize: fontSize.lg, fontWeight: "800", color: colors.onSurface },
+  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brandPrimary },
+  badge: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill },
+  badgeText: { color: colors.onBrandPrimary, fontSize: fontSize.xs, fontWeight: "800" },
+  banner: { flexDirection: "row", gap: spacing.sm, alignItems: "center", backgroundColor: colors.error + "14", padding: spacing.md, borderRadius: radius.md },
+  bannerText: { flex: 1, fontSize: fontSize.xs, color: colors.error, fontWeight: "700" },
+  simulated: { fontSize: fontSize.xs, color: colors.textSecondary, textAlign: "center", fontStyle: "italic" },
+  err: { fontSize: fontSize.sm, color: colors.error, textAlign: "center", fontWeight: "700" },
+  fine: { fontSize: fontSize.xs, color: colors.muted, textAlign: "center", lineHeight: 18 },
+  legal: { flexDirection: "row", justifyContent: "center", gap: spacing.sm },
+  legalText: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "700" },
+  confirmText: { fontSize: fontSize.md, fontWeight: "700", color: colors.onSurface, textAlign: "center" },
 });

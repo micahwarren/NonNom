@@ -7,7 +7,7 @@ import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/src/auth-context";
 import { colors, spacing, radius } from "@/src/theme";
-import { PetCharacter } from "@/src/pet-character";
+import { BuddyAvatar } from "@/src/buddy";
 
 export default function Signup() {
   const insets = useSafeAreaInsets();
@@ -28,7 +28,7 @@ export default function Signup() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: colors.surface }}>
       <ScrollView contentContainerStyle={[styles.wrap, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled">
-        <View style={styles.petWrap}><PetCharacter mood="glowing" size={140} /></View>
+        <View style={styles.petWrap}><BuddyAvatar state="celebrating" size={150} /></View>
         <Text style={styles.title}>Adopt your buddy</Text>
         <Text style={styles.subtitle}>Eat well, keep them glowing</Text>
 
