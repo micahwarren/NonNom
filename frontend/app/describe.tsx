@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { AiItem, api, Meal } from "@/src/api";
 import { Button, Card, ErrorState, Icon, ScreenHeader } from "@/src/ui";
 import { ConfirmItems } from "@/src/food-components";
@@ -10,6 +10,7 @@ import { track } from "@/src/analytics";
 const EXAMPLES = ["Two eggs, three strips of bacon, toast with butter", "Chicken rice bowl with avocado", "Large latte with oat milk and a banana"];
 
 export default function DescribeScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,7 +61,7 @@ export default function DescribeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   input: { minHeight: 120, fontSize: fontSize.md, color: colors.onSurface, textAlignVertical: "top", lineHeight: 22 },
   inputFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: spacing.sm },
   dictate: { fontSize: fontSize.xs, color: colors.muted, fontWeight: "600" },

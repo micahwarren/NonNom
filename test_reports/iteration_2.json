@@ -1,0 +1,62 @@
+{
+  "summary": "Executed targeted backend+frontend regression for Buddy/Progress/You customization and theme updates using public preview URL. Backend pytest suite passed 10/10. Frontend critical flows mostly pass (water add/undo restore, advice popup behavior, horizontal history tap, subscription layout on 390/320, Edit Goal route/cancel/save return, shortcut removals).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Profile goal card",
+        "issue": "Duplicate testID `goal-card` rendered in DOM (Playwright strict-mode resolved 2 matches), causing ambiguous automation targeting.",
+        "testID": "goal-card",
+        "priority": "medium"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Customize persistence verification in UI",
+        "issue": "Selected cosmetic state is not reliably exposed via web accessibility attributes (`aria-selected` came back null), so UI-level persistence assertions are partially blocked even though backend equip persistence passed.",
+        "affected_testIDs": ["customization-categories", "cosmetics-grid", "cosmetic-hat_cheese"]
+      },
+      {
+        "flow": "Dark mode toggle state assertion",
+        "issue": "Web switch control for `dark-mode-toggle` does not provide a stable checked-state signal for automation (`is_checked` unsupported, aria checked inconsistent), reducing deterministic persistence assertions. Visual propagation across routes worked.",
+        "affected_testIDs": ["dark-mode-toggle"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/artifacts_iter2/app_load.png",
+    "/app/test_reports/artifacts_iter2/final_profile_state.png",
+    "/app/test_reports/artifacts_iter2/final_state_run3.png"
+  ],
+  "action_items": [
+    "Make `goal-card` testID unique on Profile screen to avoid duplicate element resolution.",
+    "Expose deterministic selected state for cosmetic tiles on web (e.g., stable `data-selected` or aria semantics) to support reliable UI persistence checks.",
+    "Expose deterministic checked state for `dark-mode-toggle` (web) to enable robust automation verification.",
+    "Main agent should quickly self-verify demo profile baseline values (goal/age/targets) if strict restoration parity is required. Demo equipment was restored to defaults after testing."
+  ],
+  "critical_code_review_comments": [
+    "UI testability gap: some interactive stateful controls rely on visual style only without machine-readable state hooks, making regression checks brittle.",
+    "Given broad cross-screen theme requirements, add explicit testIDs/attributes for theme state and selected cosmetic state to reduce false negatives in automation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/scripts/restore_demo_equipment.py",
+    "/app/test_reports/iteration_2.json"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10)",
+    "frontend": "~85% (core requested flows passed; two state-verification checks partially blocked by testability attributes)"
+  },
+  "seed_data_creation": "Created temporary TEST_ users during backend pytest via signup fixture; each cleaned up with DELETE /api/me. Demo account cosmetics temporarily changed during UI test and then restored to defaults via /app/scripts/restore_demo_equipment.py.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use /app/backend/tests/backend_test.py for API regression. UI automation should treat dark-mode and cosmetic selection state as partially non-deterministic unless additional state attributes are added.",
+  "rca_of_issue": "No backend functional failures in this iteration. Primary blockers were frontend state observability (duplicate/ambiguous testID and missing deterministic selected/checked attributes), not API correctness."
+}

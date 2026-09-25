@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import type { PurchasesPackage } from "react-native-purchases";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { useAuth } from "@/src/auth-context";
 import { rcSimulated, useSubscription } from "@/src/revenuecat";
 import { BuddyAvatar } from "@/src/buddy";
@@ -16,6 +16,7 @@ const BENEFITS = [
 const LEGAL = { terms: process.env.EXPO_PUBLIC_TERMS_URL, privacy: process.env.EXPO_PUBLIC_PRIVACY_URL };
 
 export default function Paywall() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
   const { user, purchaseIdentityError } = useAuth();
@@ -123,6 +124,7 @@ export default function Paywall() {
 }
 
 function PlanRow({ pkg, label, selected, onPress, badge, sub, testID }: { pkg: PurchasesPackage; label: string; selected: boolean; onPress: () => void; badge?: string; sub: string; testID?: string }) {
+  const { colors, styles } = useThemeStyles(createStyles);
   return (
     <Pressable onPress={onPress} testID={testID} accessibilityRole="radio" accessibilityState={{ selected }} style={[styles.plan, selected && styles.planOn]}>
       <View style={[styles.radio, selected && { borderColor: colors.brandPrimary }]}>{selected && <View style={styles.radioDot} />}</View>
@@ -139,7 +141,7 @@ function getManageUrl() {
   return Platform.OS === "ios" ? "https://apps.apple.com/account/subscriptions" : "https://play.google.com/store/account/subscriptions";
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   title: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, textAlign: "center", letterSpacing: -0.5 },
   sub: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: "center", lineHeight: 20 },
   benefit: { flexDirection: "row", alignItems: "center", gap: spacing.sm },

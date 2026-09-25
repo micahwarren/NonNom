@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, Platform, Pressable, RefreshControl, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api, ReactionType, SocialPost, SocialUser } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar } from "@/src/buddy";
@@ -15,6 +15,7 @@ const KIND_ICON: Record<string, IconName> = { daily_goal: "checkmark-done-circle
 const REACT: { type: ReactionType; label: string; icon: IconName }[] = [{ type: "high_five", label: "High five", icon: "hand-left" }, { type: "nice", label: "Nice!", icon: "thumbs-up" }, { type: "fire", label: "🔥", icon: "flame" }];
 
 export default function Friends() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { tab: initial } = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>((initial as Tab) || "feed");
@@ -34,6 +35,7 @@ export default function Friends() {
 
 // ---------------- Feed ----------------
 function Feed({ onInvite }: { onInvite: () => void }) {
+  const { colors, styles } = useThemeStyles(createStyles);
   const [items, setItems] = useState<SocialPost[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [friendsCount, setFriendsCount] = useState(0);
@@ -102,6 +104,7 @@ function Feed({ onInvite }: { onInvite: () => void }) {
 
 // ---------------- Friends list + search ----------------
 function FriendsList() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const toast = useToast();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SocialUser[] | null>(null);
@@ -177,6 +180,7 @@ function FriendsList() {
 }
 
 function FriendMenu({ u, onRemove, onBlock }: { u: SocialUser; onRemove: () => void; onBlock: () => void }) {
+  const { colors, styles } = useThemeStyles(createStyles);
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<"remove" | "block" | null>(null);
   if (!open) return <Pressable onPress={() => setOpen(true)} style={styles.menuBtn} accessibilityLabel={`Options for ${u.name}`} testID="friend-menu"><Icon name="ellipsis-horizontal" size={18} color={colors.textSecondary} /></Pressable>;
@@ -190,6 +194,7 @@ function FriendMenu({ u, onRemove, onBlock }: { u: SocialUser; onRemove: () => v
 
 // ---------------- Side-by-side Buddies ----------------
 function Buddies({ onInvite }: { onInvite: () => void }) {
+  const { colors, styles } = useThemeStyles(createStyles);
   const [data, setData] = useState<{ me: SocialUser; friends: SocialUser[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const load = useCallback(async () => { setErr(null); try { setData(await api.buddies()); } catch (e: any) { setErr(e.message); } }, []);
@@ -218,6 +223,7 @@ function Buddies({ onInvite }: { onInvite: () => void }) {
 
 // ---------------- Invite ----------------
 function Invite() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const toast = useToast();
   const { user } = useAuth();
   const [inv, setInv] = useState<{ code: string; url: string | null; friends_joined: number } | null>(null);
@@ -259,7 +265,7 @@ function Invite() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   name: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface },
   handle: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "600" },
   meta: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "600" },

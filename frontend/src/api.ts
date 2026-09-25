@@ -7,9 +7,9 @@ export type Targets = { calories: number; protein_g: number; carbs_g: number; fa
 export type Profile = {
   goal?: "lose" | "maintain" | "gain" | "improve"; age?: number; height_cm?: number; weight_kg?: number;
   goal_weight_kg?: number; sex?: "male" | "female" | "unspecified"; activity_level?: string;
-  pace_lb_per_week?: number; diet?: string; allergies?: string[]; units?: "imperial" | "metric"; start_weight_kg?: number;
+  pace_lb_per_week?: number; diet?: string | null; allergies?: string[]; units?: "imperial" | "metric"; start_weight_kg?: number;
 };
-export type Equipped = { skin: string; hat: string; glasses: string; accessory: string; outfit: string; background: string };
+export type Equipped = { skin: string; hat: string; glasses: string; accessory: string; outfit: string; background: string; shape: string; shoes: string };
 export type PublicUser = {
   id: string; email: string; name: string; username: string; plan: "free" | "premium";
   onboarding_complete: boolean; profile: Profile; targets: Targets; streak_days: number; longest_streak: number; targets_rationale?: string[]; streak_freeze?: StreakFreeze; level?: number; leveled_today?: boolean;

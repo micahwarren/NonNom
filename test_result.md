@@ -101,3 +101,54 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Simplify Buddy and Log; one cup water; advice info popup; horizontal daily history; fix subscription layout and Edit Goal; new outfits, funny accessories and shaped Noms with responsive expressions; optional dark mode."
+frontend:
+  - task: "Buddy and Log simplification, horizontal history"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "main"
+        working: "NA"
+        comment: "Buddy visual smoke passed at 390x844. Advice popup opens and closes. Removed redundant buttons; single 250mL cup and horizontal date cards."
+  - task: "Goal editor and subscription layout"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "user"
+        working: false
+        comment: "Edit Goal bounced back to Buddy."
+      - agent: "main"
+        working: "NA"
+        comment: "Guard now allows edit=1; save returns to You, start weight is preserved, unit changes convert inputs, cleared diet/goal preferences persist. Subscription has stacked title/status/full-width action."
+  - task: "Persisted dark theme and expressive Nom wardrobe"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "main"
+        working: "NA"
+        comment: "AsyncStorage theme selection and reactive tokens across all screens/shared components. Six shapes total, independent footwear, 4 new hats, 5 outfits, 3 accessories. Automatic save with busy guard. Happy/sad preview passed visually."
+backend:
+  - task: "Expanded cosmetics and goal edit preservation"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "main"
+        working: "NA"
+        comment: "Catalog defaults support old users; shape/shoes validated by equip endpoint with existing free/premium checks. No auth credentials changed."
+test_plan:
+  current_focus: ["Edit Goal saves and cancels correctly", "Dark mode persists and reaches all screens", "Water cup add/undo", "Horizontal history opens correct log", "Cosmetics persist and expressions differ"]
+  test_all: false
+agent_communication:
+  - agent: "main"
+    message: "Final verification complete. Backend 10/10; user flows pass. Resolved duplicate profile navigation via dismissTo, removed disabled wrapper around switches, added radio selected indicators and appearance state subtitle. Screenshot retests passed dark-mode/storage, goal save/cancel, cosmetic persistence across new session. Demo goal currently Maintain after tester edits; equipment/light mode restored. See iteration_2_followup.json."
+  - agent: "main"
+    message: "Use demo@nomnom.app / DemoPass123! per memory/test_credentials.md. Existing data must be restored after testing. tsc passes. Existing repo-wide eslint includes old JSX apostrophe and set-state-in-effect findings; dedicated lint tools pass. Screenshot smoke passed Buddy and Customize. Please test both frontend and backend; see testing task for details."

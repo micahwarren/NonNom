@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api, DaySummary, ProgressData, WeeklyReport } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar } from "@/src/buddy";
@@ -12,6 +12,7 @@ import { fmtNum, fmtWater, fmtWeight, dayName } from "@/src/units";
 type Range = "7" | "30" | "90" | "365";
 
 export default function ProgressScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, isPremium } = useAuth();
@@ -32,7 +33,6 @@ export default function ProgressScreen() {
     } catch (e: any) { setErr(e.message); }
   }, [range]);
   useFocusEffect(useCallback(() => { load().finally(() => setLoading(false)); }, [load]));
-  useEffect(() => { load(); }, [range]);
 
   const hasData = (data?.days_logged ?? 0) > 0;
   const weights = data?.weight_history ?? [];
@@ -101,19 +101,22 @@ export default function ProgressScreen() {
             </Card>
 
             {/* Daily history */}
-            <Text style={styles.section}>Daily History</Text>
-            <Card style={{ padding: 0, overflow: "hidden" }} testID="daily-history">
-              {history.map((d, idx) => (
-                <Pressable key={d.date} testID={`history-${d.date}`} onPress={() => router.push({ pathname: "/(tabs)/log", params: { date: d.date } } as any)} style={({ pressed }) => [styles.histRow, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.divider }, pressed && { backgroundColor: colors.surface }]} accessibilityRole="button">
-                  <BuddyAvatar state={d.entries ? d.buddy.state : "neutral"} equipped={user?.buddy?.equipped} size={40} animate={false} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.histDay}>{dayName(d.date)} <Text style={styles.histLabel}>· {d.day_label}</Text></Text>
-                    <Text style={styles.sub}>{d.entries ? `${fmtNum(d.calories_in)} kcal · ${Math.round(d.protein_g)}g protein` : "No entries"}</Text>
-                  </View>
-                  <Icon name="chevron-forward" size={16} color={colors.muted} />
+            <View style={styles.cardHead}>
+              <Text style={styles.section} testID="daily-history-title">Daily History</Text>
+              <Text style={styles.sub} testID="daily-history-hint">Swipe to explore</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} testID="daily-history" contentContainerStyle={styles.historyTrack} snapToInterval={168} decelerationRate="fast">
+              {history.map(d => (
+                <Pressable key={d.date} testID={`history-${d.date}`} onPress={() => router.push({ pathname: "/(tabs)/log", params: { date: d.date } } as any)} style={({ pressed }) => [styles.histCard, pressed && { opacity: 0.75 }]} accessibilityRole="button" accessibilityLabel={`View log for ${d.date}`}>
+                  <Text style={styles.histDay}>{dayName(d.date)}</Text>
+                  <Text style={styles.histLabel}>{new Date(d.date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}</Text>
+                  <BuddyAvatar state={d.entries ? d.buddy.state : "neutral"} equipped={user?.buddy?.equipped} size={64} animate={false} />
+                  <Text style={styles.histLabel}>{d.day_label}</Text>
+                  <Text style={styles.histCalories}>{d.entries ? `${fmtNum(d.calories_in)} kcal` : "No entries"}</Text>
+                  <Text style={styles.histLabel}>{d.entries ? `${Math.round(d.protein_g)}g protein` : "View day"}</Text>
                 </Pressable>
               ))}
-            </Card>
+            </ScrollView>
           </>
         )}
       </ScrollView>
@@ -122,6 +125,7 @@ export default function ProgressScreen() {
 }
 
 function BarChart({ series, target, color, labels }: { series: number[]; target: number; color: string; labels?: string[] }) {
+  const { colors, styles } = useThemeStyles(createStyles);
   const max = Math.max(target * 1.2, ...series, 1);
   const step = Math.max(1, Math.ceil(series.length / 45));
   const shown = series.filter((_, i) => i % step === 0);
@@ -138,6 +142,7 @@ function BarChart({ series, target, color, labels }: { series: number[]; target:
 
 /** True line chart: dots joined by rotated segments (no SVG dependency). */
 function WeightChart({ points, labels, color, goal, units }: { points: number[]; labels: string[]; color: string; goal: number | null; units: "imperial" | "metric" }) {
+  const { colors } = useThemeStyles(createStyles);
   const [w, setW] = useState(0);
   const h = 110, padY = 14, padX = 10;
   const all = goal != null ? [...points, goal] : points;
@@ -168,7 +173,7 @@ function WeightChart({ points, labels, color, goal, units }: { points: number[];
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
   title: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.5 },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -188,7 +193,9 @@ const styles = StyleSheet.create({
   unlockRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.xs },
   unlockText: { fontSize: fontSize.sm, fontWeight: "700", color: colors.premium },
   section: { fontSize: fontSize.lg, fontWeight: "800", color: colors.onSurface, marginTop: spacing.xs },
-  histRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, minHeight: 60 },
+  historyTrack: { gap: spacing.md, paddingVertical: spacing.xs },
+  histCard: { width: 156, padding: spacing.md, gap: 4, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: "center" },
+  histCalories: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface, marginTop: 4 },
   histDay: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface },
   histLabel: { fontWeight: "700", color: colors.textSecondary, fontSize: fontSize.sm },
 });

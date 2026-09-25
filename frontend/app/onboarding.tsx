@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api, Profile, Targets } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar } from "@/src/buddy";
@@ -25,6 +25,7 @@ const DIETS = ["No preference", "Vegetarian", "Vegan", "Pescatarian", "Keto", "H
 const ALLERGIES = ["Peanuts", "Tree nuts", "Dairy", "Eggs", "Gluten", "Soy", "Shellfish", "Fish"];
 
 export default function Onboarding() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
@@ -50,6 +51,21 @@ export default function Onboarding() {
   const steps: Step[] = useMemo(() => ["welcome", "goal", "about", "body", "activity", "diet", "plan"], []);
   const idx = steps.indexOf(step);
 
+  function changeUnits(nextUnits: "imperial" | "metric") {
+    if (nextUnits === units) return;
+    const convertWeight = (value: string) => {
+      const n = Number(value);
+      return value && Number.isFinite(n) ? (nextUnits === "metric" ? lbToKg(n) : kgToLb(n)).toFixed(1) : value;
+    };
+    setWeight(convertWeight(weight)); setGoalWeight(convertWeight(goalWeight));
+    if (nextUnits === "metric") {
+      if (ft || inch) setCm(ftInToCm(Number(ft) || 0, Number(inch) || 0).toFixed(1));
+    } else if (cm) {
+      const h = cmToFtIn(Number(cm)); setFt(String(h.ft)); setInch(String(h.inch));
+    }
+    setUnits(nextUnits);
+  }
+
   function profile(): Profile {
     const heightCm = units === "metric" ? parseFloat(cm) : ftInToCm(parseFloat(ft) || 0, parseFloat(inch) || 0);
     const w = parseFloat(weight); const gw = parseFloat(goalWeight);
@@ -57,7 +73,7 @@ export default function Onboarding() {
       goal, age: parseInt(age) || undefined, sex, height_cm: heightCm || undefined,
       weight_kg: w ? (units === "metric" ? w : lbToKg(w)) : undefined, goal_weight_kg: gw && goal !== "maintain" ? (units === "metric" ? gw : lbToKg(gw)) : undefined,
       activity_level: activity, pace_lb_per_week: goal === "lose" || goal === "gain" ? pace : undefined,
-      diet: diet === "No preference" ? undefined : diet, allergies, units,
+      diet: diet === "No preference" ? null : diet, allergies, units,
     };
   }
   async function next() {
@@ -72,15 +88,16 @@ export default function Onboarding() {
     setBusy(true);
     try {
       const u = await api.onboarding(profile());
-      track("onboarding_completed", { goal });
+      track(edit ? "goal_updated" : "onboarding_completed", { goal });
       setUser(u);
-      router.replace("/(tabs)");
+      if (edit) router.dismissTo("/(tabs)/profile");
+      else router.replace("/(tabs)");
     } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } finally { setBusy(false); }
   }
   const canNext = step === "goal" ? !!goal : step === "about" ? !!(parseInt(age) && sex) : step === "body" ? !!(parseFloat(weight) && (units === "metric" ? parseFloat(cm) : parseFloat(ft))) : true;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top }}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top }} testID="goal-editor">
       {step !== "welcome" && (
         <View style={styles.top}>
           <Pressable onPress={() => (idx > 1 || edit ? (idx > (edit ? 1 : 0) ? setStep(steps[idx - 1]) : router.back()) : setStep("welcome"))} hitSlop={10} accessibilityLabel="Back" testID="onb-back"><Icon name="chevron-back" size={24} /></Pressable>
@@ -121,7 +138,7 @@ export default function Onboarding() {
         {step === "body" && (
           <>
             <Text style={styles.h1}>Height and weight</Text>
-            <Segmented options={[{ value: "imperial", label: "lb / ft" }, { value: "metric", label: "kg / cm" }]} value={units} onChange={setUnits} />
+            <Segmented options={[{ value: "imperial", label: "lb / ft" }, { value: "metric", label: "kg / cm" }]} value={units} onChange={changeUnits} />
             {units === "metric" ? <Field label="Height (cm)" value={cm} onChangeText={setCm} keyboardType="number-pad" placeholder="170" testID="onb-cm" /> : (
               <View style={{ flexDirection: "row", gap: spacing.sm }}>
                 <View style={{ flex: 1 }}><Field label="Height (ft)" value={ft} onChangeText={setFt} keyboardType="number-pad" placeholder="5" testID="onb-ft" /></View>
@@ -192,15 +209,16 @@ export default function Onboarding() {
           ? <Button title={edit ? "Save My Plan" : "Start My Plan"} size="lg" onPress={finish} loading={busy} testID="onb-finish" />
           : <Button title="Continue" size="lg" onPress={next} disabled={!canNext} loading={busy} testID="onb-next" />}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 function PlanStat({ v, l, c }: { v: string; l: string; c: string }) {
+  const { styles } = useThemeStyles(createStyles);
   return <View style={{ alignItems: "center", flex: 1 }}><Text style={[styles.planV, { color: c }]}>{v}</Text><Text style={styles.planL}>{l}</Text></View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   whyBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 44 },
   whyText: { fontWeight: "800", color: colors.brandPrimary, fontSize: fontSize.sm },
   whyBox: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, gap: 6, borderWidth: 1, borderColor: colors.border },

@@ -2,11 +2,10 @@ import React, { useState } from "react";
 import { Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { ensureReminderPermission, openNotificationSettings, PermissionResult, remindersSupported, syncReminders } from "@/src/reminders";
-import { useSubscription } from "@/src/revenuecat";
 import { BuddyAvatar } from "@/src/buddy";
 import { Button, Card, Field, Icon, PremiumBadge, Row, SectionTitle, Sheet, useToast } from "@/src/ui";
 import { fmtWater, fmtWeight, fmtNum } from "@/src/units";
@@ -25,11 +24,12 @@ const PRIV: { key: string; label: string }[] = [
 ];
 
 export default function Profile() {
+  const { colors, styles, scheme, setColorScheme } = useThemeStyles(createStyles);
+  const [themeBusy, setThemeBusy] = useState(false);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
   const { user, signOut, refresh, isPremium, setUser } = useAuth();
-  const { isSubscribed } = useSubscription();
   const [sheet, setSheet] = useState<null | "personal" | "notifications" | "privacy" | "units" | "delete">(null);
   const [name, setName] = useState(user?.name ?? "");
   const [username, setUsername] = useState(user?.username ?? "");
@@ -78,8 +78,8 @@ export default function Profile() {
           {isPremium ? <PremiumBadge /> : <Button title="Go Premium" size="sm" onPress={() => router.push("/paywall")} testID="profile-go-premium" />}
         </View>
 
-        <SectionTitle title="My Goal" action="Edit Goal" onAction={() => router.push("/onboarding?edit=1" as any)} />
-        <Card style={{ gap: 4 }} testID="goal-card">
+        <SectionTitle title="My Goal" action="Edit Goal" testID="edit-goal" onAction={() => router.push({ pathname: "/onboarding", params: { edit: "1" } })} />
+        <Card style={{ gap: 4 }} testID="profile-goal-card">
           <Text style={styles.big}>{GOAL_LABEL[p.goal ?? "maintain"]}</Text>
           {p.weight_kg && p.goal_weight_kg && p.goal !== "maintain" && <Text style={styles.sub} testID="goal-weights">{fmtWeight(p.start_weight_kg ?? p.weight_kg, units, 0)} → {fmtWeight(p.goal_weight_kg, units, 0)}{p.start_weight_kg && Math.abs(p.weight_kg - p.start_weight_kg) > 0.05 ? ` · now ${fmtWeight(p.weight_kg, units, 0)}` : ""}{p.pace_lb_per_week ? ` · ${p.pace_lb_per_week} lb/week` : ""}</Text>}
           {!p.goal && <Text style={styles.sub}>Set up your goal to personalize your targets.</Text>}
@@ -109,8 +109,31 @@ export default function Profile() {
 
         <SectionTitle title="Subscription" />
         <Card style={{ padding: 0 }} testID="subscription-card">
-          <Row icon={isPremium ? "sparkles" : "sparkles-outline"} title={isPremium ? "NomNom Premium" : "NomNom Free"} subtitle={isPremium ? (isSubscribed ? "Active via RevenueCat" : "Active") : "Upgrade for full Buddy customization and more AI"} onPress={() => (isPremium ? Linking.openURL(manageUrl) : router.push("/paywall"))} right={<Text style={styles.link}>{isPremium ? "Manage Subscription" : "Upgrade"}</Text>} />
-          <Row icon="refresh-outline" title="Restore Purchases" onPress={() => router.push("/paywall")} />
+          <View style={styles.subscriptionBody}>
+            <View style={styles.subscriptionHeader}>
+              <View style={styles.subscriptionIcon}><Icon name="sparkles" color={colors.premium} size={23} /></View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={styles.big} testID="subscription-plan">{isPremium ? "NomNom Premium" : "NomNom Free"}</Text>
+                <Text style={styles.sub} testID="subscription-status">{isPremium ? "Your premium benefits are active" : "Your everyday nutrition companion"}</Text>
+              </View>
+            </View>
+            {!isPremium && <Text style={styles.sub} testID="subscription-benefits">More AI meal tools and the full Buddy wardrobe.</Text>}
+            <Button title={isPremium ? "Manage subscription" : "Explore Premium"} variant="secondary" testID="manage-subscription" onPress={() => {
+              if (isPremium && Platform.OS !== "web") Linking.openURL(manageUrl).catch(() => toast.show("Couldn't open your subscriptions", { icon: "alert-circle" }));
+              else router.push("/paywall");
+            }} />
+          </View>
+          <Row icon="refresh-outline" title="Restore purchases" testID="restore-purchases" onPress={() => router.push("/paywall")} />
+        </Card>
+
+        <SectionTitle title="Appearance" />
+        <Card style={{ padding: 0 }} testID="appearance-card">
+          <Row icon={scheme === "dark" ? "moon" : "moon-outline"} title="Dark mode" subtitle={`${scheme === "dark" ? "On" : "Off"} · Saved on this device`} testID="dark-mode-row" right={<Switch testID="dark-mode-toggle" accessibilityRole="switch" accessibilityState={{ checked: scheme === "dark" }} accessibilityLabel="Dark mode" value={scheme === "dark"} disabled={themeBusy} onValueChange={async value => {
+            setThemeBusy(true);
+            try { await setColorScheme(value ? "dark" : "light"); }
+            catch { toast.show("Couldn't save your appearance preference", { icon: "alert-circle" }); }
+            finally { setThemeBusy(false); }
+          }} trackColor={{ false: colors.borderStrong, true: colors.brandPrimary }} />} />
         </Card>
 
         <SectionTitle title="Account" />
@@ -162,11 +185,16 @@ export default function Profile() {
   );
 }
 
-function Target({ label, v, c = colors.onSurface }: { label: string; v: string; c?: string }) {
+function Target({ label, v, c }: { label: string; v: string; c?: string }) {
+  const { colors, styles } = useThemeStyles(createStyles);
+  c ??= colors.onSurface;
   return <View style={{ alignItems: "center", minWidth: 56 }}><Text style={[styles.tv, { color: c }]}>{v}</Text><Text style={styles.tl}>{label}</Text></View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  subscriptionBody: { padding: spacing.lg, gap: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  subscriptionHeader: { flexDirection: "row", gap: spacing.md, alignItems: "center" },
+  subscriptionIcon: { width: 46, height: 46, borderRadius: 15, backgroundColor: colors.premium + "1A", alignItems: "center", justifyContent: "center" },
   permBox: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.sm },
   permText: { fontSize: fontSize.sm, color: colors.onSurface, lineHeight: 20 },
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxxl },

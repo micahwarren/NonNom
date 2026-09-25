@@ -2,7 +2,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "./theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "./theme";
 import { Icon, IconName, Sheet, useToast } from "./ui";
 import { api } from "./api";
 import { track } from "./analytics";
@@ -10,18 +10,19 @@ import { track } from "./analytics";
 type Ctx = { open: () => void; close: () => void };
 const AddSheetCtx = createContext<Ctx>({ open: () => {}, close: () => {} });
 
-const ACTIONS: { key: string; title: string; sub: string; icon: IconName; route?: string; color: string }[] = [
+const actions = (colors: ThemeColors): { key: string; title: string; sub: string; icon: IconName; route?: string; color: string }[] => [
   { key: "photo", title: "Take Food Photo", sub: "Buddy estimates the meal", icon: "camera", route: "/scan", color: colors.brandPrimary },
   { key: "barcode", title: "Scan Barcode", sub: "Packaged foods, no AI needed", icon: "barcode", route: "/barcode", color: colors.onSurface },
   { key: "search", title: "Search Food", sub: "USDA + Open Food Facts", icon: "search", route: "/search", color: colors.protein },
   { key: "describe", title: "Describe Meal", sub: "Type or dictate what you ate", icon: "chatbubble-ellipses", route: "/describe", color: colors.carbs },
-  { key: "water", title: "Add Water", sub: "Quick +250 / +500 / +750 ml", icon: "water", color: colors.water },
+  { key: "water", title: "Add Water", sub: "A cup at a time · 250 mL per cup", icon: "water", color: colors.water },
   { key: "weight", title: "Log Weight", sub: "Track your trend", icon: "scale", route: "/weight", color: colors.fat },
   { key: "exercise", title: "Log Exercise", sub: "Activity and calories burned", icon: "walk", route: "/exercise", color: colors.success },
   { key: "saved", title: "Saved Meals", sub: "Re-log a favorite in one tap", icon: "bookmark", route: "/saved", color: colors.premium },
 ];
 
 export function AddSheetProvider({ children }: { children: React.ReactNode }) {
+  const { colors, styles } = useThemeStyles(createStyles);
   const [visible, setVisible] = useState(false);
   const [waterMode, setWaterMode] = useState(false);
   const router = useRouter();
@@ -48,13 +49,13 @@ export function AddSheetProvider({ children }: { children: React.ReactNode }) {
             {[250, 500, 750].map(ml => (
               <Pressable key={ml} testID={`sheet-water-${ml}`} onPress={() => addWater(ml)} style={({ pressed }) => [styles.waterBtn, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`Add ${ml} milliliters`}>
                 <Icon name="water" size={18} color={colors.water} />
-                <Text style={styles.waterText}>+{ml} ml</Text>
+                <Text style={styles.waterText}>+ {ml / 250} {ml === 250 ? "cup" : "cups"}</Text>
               </Pressable>
             ))}
           </View>
         ) : (
           <View style={styles.grid}>
-            {ACTIONS.map(a => (
+            {actions(colors).map(a => (
               <Pressable key={a.key} testID={`add-${a.key}`} accessibilityRole="button" accessibilityLabel={a.title}
                 onPress={() => { if (a.key === "water") { setWaterMode(true); return; } close(); if (a.route) router.push(a.route as any); }}
                 style={({ pressed }) => [styles.action, pressed && { backgroundColor: colors.surfaceTertiary }]}>
@@ -75,7 +76,7 @@ export function AddSheetProvider({ children }: { children: React.ReactNode }) {
 
 export const useAddSheet = () => useContext(AddSheetCtx);
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   grid: { gap: 2 },
   action: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 10, paddingHorizontal: spacing.sm, borderRadius: radius.md, minHeight: 56 },
   actionIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },

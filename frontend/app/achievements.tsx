@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { Achievement, api } from "@/src/api";
 import { Card, ErrorState, Icon, IconName, LoadingState, ScreenHeader } from "@/src/ui";
 
 export default function Achievements() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const [data, setData] = useState<{ achievements: Achievement[]; unlocked_count: number; total: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export default function Achievements() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md },
   icon: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
   name: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface },

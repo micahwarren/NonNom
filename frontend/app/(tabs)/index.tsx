@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { BuddyAvatar } from "@/src/buddy";
 import { api, DaySummary } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
@@ -11,6 +11,7 @@ import { fmtNum, fmtWater } from "@/src/units";
 import { track } from "@/src/analytics";
 
 export default function Home() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
@@ -20,6 +21,8 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [streakInfo, setStreakInfo] = useState(false);
+  const [buddyInfo, setBuddyInfo] = useState(false);
+  const [waterBusy, setWaterBusy] = useState(false);
   const units = user?.profile?.units ?? "imperial";
 
   const load = useCallback(async () => {
@@ -32,15 +35,17 @@ export default function Home() {
   async function onRefresh() { setRefreshing(true); await load(); setRefreshing(false); }
 
   async function quickWater(ml: number) {
-    if (!summary) return;
+    if (!summary || waterBusy) return;
+    setWaterBusy(true);
     setSummary({ ...summary, water_ml: summary.water_ml + ml });
     try {
       const r = await api.logWater(ml);
       track("water_logged", { ml });
-      toast.show(`Added ${ml} ml`, { icon: "water", actionTitle: "Undo", onAction: async () => { await api.undoWater(r.id).catch(() => {}); load(); } });
+      toast.show("Added 1 cup of water (250 mL)", { icon: "water", actionTitle: "Undo", onAction: async () => { await api.undoWater(r.id).catch(() => {}); load(); } });
       if (r.unlocked?.length) toast.show(`Achievement unlocked: ${r.unlocked[0].name}`, { icon: "trophy" });
       load();
     } catch (e: any) { toast.show(e.message ?? "Couldn't log water", { icon: "alert-circle" }); load(); }
+    finally { setWaterBusy(false); }
   }
 
   const t = summary?.targets ?? user?.targets ?? { calories: 2000, protein_g: 150, carbs_g: 225, fat_g: 65, water_ml: 2500 };
@@ -72,16 +77,22 @@ export default function Home() {
         ) : err ? (
           <ErrorState message={err} onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} title="Couldn't load your day" />
         ) : (
-          <Pressable style={styles.hero} onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel="Customize Buddy" testID="buddy-hero">
-            <BuddyAvatar state={summary?.buddy.state ?? "neutral"} equipped={user?.buddy?.equipped} size={150} level={level} />
+          <View style={styles.hero}>
+            <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel="Customize Buddy" testID="buddy-hero">
+              <BuddyAvatar state={summary?.buddy.state ?? "neutral"} equipped={user?.buddy?.equipped} size={150} level={level} testID="home-buddy-avatar" />
+            </Pressable>
             <View style={styles.levelPill} testID="level-pill">
               <Icon name="star" size={12} color={colors.premium} />
               <Text style={styles.levelText}>Level {level}</Text>
               <Text style={styles.levelSub}>{leveledToday ? "· leveled up today" : "· log today to level up"}</Text>
             </View>
-            <Text style={styles.headline} testID="buddy-headline">{summary?.buddy.headline}</Text>
-            <Text style={styles.message} testID="buddy-message">{summary?.buddy.message}</Text>
-          </Pressable>
+            <View style={styles.headlineRow}>
+              <Text style={styles.headline} testID="buddy-headline">{summary?.buddy.headline}</Text>
+              <Pressable testID="buddy-info-button" onPress={() => setBuddyInfo(true)} accessibilityRole="button" accessibilityLabel="Why Buddy feels this way" style={styles.infoButton}>
+                <Icon name="information-circle-outline" size={20} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
         )}
 
         {/* Calories */}
@@ -115,18 +126,12 @@ export default function Home() {
             <Text style={styles.waterVal} testID="water-value">{fmtWater(summary?.water_ml ?? 0, units)} <Text style={styles.calGoal}>/ {fmtWater(t.water_ml, units)}</Text></Text>
             <ProgressBar value={(summary?.water_ml ?? 0) / Math.max(t.water_ml, 1)} color={colors.water} height={6} />
           </View>
-          {[250, 500].map(ml => (
-            <Pressable key={ml} testID={`water-quick-${ml}`} onPress={() => quickWater(ml)} style={({ pressed }) => [styles.waterBtn, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={`Add ${ml} milliliters`}>
-              <Text style={styles.waterBtnText}>+{ml}</Text>
-            </Pressable>
-          ))}
+          <Pressable testID="water-add-cup" disabled={waterBusy || !summary} onPress={() => quickWater(250)} style={({ pressed }) => [styles.waterBtn, (pressed || waterBusy) && { opacity: 0.6 }]} accessibilityRole="button" accessibilityLabel="Add one cup of water, 250 milliliters">
+            <Text style={styles.waterBtnText}>+ 1 cup</Text>
+          </Pressable>
         </Card>
 
         {/* Actions */}
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          <Button title="Log Food" icon="add" onPress={() => router.push("/search")} style={{ flex: 1 }} size="lg" testID="log-food-cta" />
-          <Button title="Scan Meal" icon="camera" variant="secondary" onPress={() => router.push("/scan")} style={{ flex: 1 }} size="lg" testID="scan-food-cta" />
-        </View>
         <Pressable testID="feed-me-cta" onPress={() => router.push("/feed-me")} style={({ pressed }) => [styles.feedMe, pressed && { opacity: 0.9 }]} accessibilityRole="button">
           <View style={styles.feedIcon}><Icon name="sparkles" size={20} color={colors.onSurfaceInverse} /></View>
           <View style={{ flex: 1 }}>
@@ -137,6 +142,10 @@ export default function Home() {
         </Pressable>
       </ScrollView>
 
+      <Sheet visible={buddyInfo} onClose={() => setBuddyInfo(false)} title={summary?.buddy.headline} testID="buddy-info-sheet">
+        <Text style={styles.message} testID="buddy-message">{summary?.buddy.message}</Text>
+        <Button title="Got it" onPress={() => setBuddyInfo(false)} testID="buddy-info-close" style={{ marginTop: spacing.md }} />
+      </Sheet>
       <Sheet visible={streakInfo} onClose={() => setStreakInfo(false)} title={`${streak}-day streak`}>
         <Text style={styles.infoText}>Log at least one food a day to keep your streak going. Buddy also levels up once per logged day — the higher the level, the cooler Buddy looks.</Text>
         <View style={styles.freezeRow} testID="streak-freeze-status">
@@ -152,7 +161,7 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
   headerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   date: { flex: 1, fontSize: fontSize.md, color: colors.textSecondary, fontWeight: "700" },
@@ -163,7 +172,9 @@ const styles = StyleSheet.create({
   levelPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   levelText: { fontWeight: "800", fontSize: fontSize.sm, color: colors.onSurface },
   levelSub: { fontWeight: "600", fontSize: fontSize.xs, color: colors.textSecondary },
-  headline: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, textAlign: "center", letterSpacing: -0.5 },
+  headlineRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", maxWidth: "100%" },
+  infoButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  headline: { flexShrink: 1, fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface, textAlign: "center", letterSpacing: -0.5 },
   message: { fontSize: fontSize.md, color: colors.textSecondary, lineHeight: 22, textAlign: "center", paddingHorizontal: spacing.md },
   calCard: { gap: spacing.md },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
@@ -178,7 +189,7 @@ const styles = StyleSheet.create({
   macroTarget: { fontSize: fontSize.xs, fontWeight: "600", color: colors.muted },
   waterCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
   waterVal: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface, marginBottom: 6 },
-  waterBtn: { height: 40, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: colors.water + "18", alignItems: "center", justifyContent: "center" },
+  waterBtn: { height: 44, paddingHorizontal: spacing.md, borderRadius: radius.pill, backgroundColor: colors.water + "18", alignItems: "center", justifyContent: "center" },
   waterBtnText: { fontWeight: "800", color: colors.onSurface, fontSize: fontSize.sm },
   feedMe: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceInverse, borderRadius: radius.lg, padding: spacing.lg },
   feedIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },

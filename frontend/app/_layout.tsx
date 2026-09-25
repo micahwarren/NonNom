@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments, useGlobalSearchParams } from "expo-router";
 import { LogBox, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -14,7 +14,7 @@ import { AuthProvider, useAuth } from "@/src/auth-context";
 import { initializeRevenueCat, SubscriptionProvider } from "@/src/revenuecat";
 import { ToastProvider } from "@/src/ui";
 import { AddSheetProvider } from "@/src/add-sheet";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
 
@@ -25,8 +25,10 @@ try {
 }
 
 function RouterGate() {
+  const { colors } = useTheme();
   const { user, loading } = useAuth();
   const segments = useSegments();
+  const { edit } = useGlobalSearchParams<{ edit?: string }>();
   const router = useRouter();
 
   useEffect(() => {
@@ -35,8 +37,8 @@ function RouterGate() {
     const inOnboarding = segments[0] === "onboarding";
     if (!user && !inAuth) router.replace("/(auth)/login");
     else if (user && !user.onboarding_complete && !inOnboarding) router.replace("/onboarding");
-    else if (user && user.onboarding_complete && (inAuth || inOnboarding)) router.replace("/(tabs)");
-  }, [user?.id, user?.onboarding_complete, loading, segments[0]]);
+    else if (user && user.onboarding_complete && (inAuth || (inOnboarding && edit !== "1"))) router.replace("/(tabs)");
+  }, [user?.id, user?.onboarding_complete, loading, segments[0], edit]);
 
   if (loading) return <View style={{ flex: 1, backgroundColor: colors.surface }} />;
   return (
@@ -54,7 +56,9 @@ function RouterGate() {
 }
 
 export default function RootLayout() {
+  const { colors, scheme, ready } = useTheme();
   useFonts({ Ionicons: require("@react-native-vector-icons/ionicons/fonts/Ionicons.ttf") });
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.surface }} />;
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -65,7 +69,7 @@ export default function RootLayout() {
                 <AuthProvider>
                   <ToastProvider>
                     <AddSheetProvider>
-                      <StatusBar style="dark" />
+                      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
                       <RouterGate />
                     </AddSheetProvider>
                   </ToastProvider>

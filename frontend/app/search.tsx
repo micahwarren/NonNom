@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api, DbFood, FoodEntry, Meal } from "@/src/api";
 import { Button, EmptyState, ErrorState, Field, Icon, LoadingState, MealPicker, ScreenHeader, Sheet, useToast } from "@/src/ui";
-import { DbFoodSheet, MacroLine, SourceTag } from "@/src/food-components";
+import { DbFoodSheet, MacroLine } from "@/src/food-components";
 import { track } from "@/src/analytics";
 
 export default function SearchScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
   const params = useLocalSearchParams<{ meal?: Meal; date?: string }>();
@@ -93,6 +94,7 @@ export default function SearchScreen() {
 }
 
 export function ManualSheet({ visible, onClose, meal: initialMeal, initialName = "", onLogged }: { visible: boolean; onClose: () => void; meal?: Meal; initialName?: string; onLogged: () => void }) {
+  const { styles } = useThemeStyles(createStyles);
   const toast = useToast();
   const [name, setName] = useState(initialName); const [cal, setCal] = useState(""); const [p, setP] = useState(""); const [c, setC] = useState(""); const [f, setF] = useState(""); const [serving, setServing] = useState("");
   const [meal, setMeal] = useState<Meal>(initialMeal ?? "lunch");
@@ -126,7 +128,7 @@ export function ManualSheet({ visible, onClose, meal: initialMeal, initialName =
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   searchBox: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, height: 50 },
   input: { flex: 1, fontSize: fontSize.md, color: colors.onSurface, height: 50 },
   hint: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "600", paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },

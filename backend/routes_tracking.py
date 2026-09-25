@@ -31,7 +31,7 @@ class ExerciseIn(BaseModel):
 
 
 class EquipIn(BaseModel):
-    category: Literal["skin", "hat", "glasses", "accessory", "outfit", "background"]
+    category: Literal["skin", "hat", "glasses", "accessory", "outfit", "background", "shape", "shoes"]
     cosmetic_id: str
 
 
@@ -363,7 +363,7 @@ async def log_saved(meal_id: str, body: LogSavedIn, user=Depends(current_user), 
 async def cosmetics(user=Depends(current_user)):
     items = [{**c, "available": cosmetic_available(c, user), "owned": c["id"] in (user.get("unlocked_cosmetics") or [])}
              for c in sorted(COSMETICS, key=lambda c: (c["category"], c["sort_order"])) if c["active"]]
-    return {"items": items, "equipped": equipped_for(user), "categories": ["skin", "hat", "glasses", "accessory", "outfit", "background"]}
+    return {"items": items, "equipped": equipped_for(user), "categories": ["shape", "skin", "hat", "glasses", "accessory", "outfit", "shoes", "background"]}
 
 
 @router.post("/buddy/equip")

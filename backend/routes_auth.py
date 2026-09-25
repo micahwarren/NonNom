@@ -166,7 +166,11 @@ async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depend
 
 @router.post("/me/onboarding")
 async def onboarding(body: OnboardingIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
-    prof = {**(user.get("profile") or {}), **body.profile.model_dump(exclude_none=True)}
+    # Explicitly cleared preferences must replace the old ones when editing a plan.
+    prof = {**(user.get("profile") or {}), **body.profile.model_dump(exclude_unset=True)}
+    if prof.get("goal") not in ("lose", "gain"):
+        prof["goal_weight_kg"] = None
+        prof["pace_lb_per_week"] = None
     if prof.get("weight_kg") and not prof.get("start_weight_kg"):
         prof["start_weight_kg"] = prof["weight_kg"]  # remembered forever so Progress/Goal can show start → now
     t = compute_targets(prof)

@@ -6,10 +6,11 @@ import {
 import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/src/auth-context";
-import { colors, spacing, radius } from "@/src/theme";
+import { useThemeStyles, ThemeColors, spacing, radius } from "@/src/theme";
 import { BuddyAvatar } from "@/src/buddy";
 
 export default function Login() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
   const [email, setEmail] = useState("demo@nomnom.app");
@@ -66,7 +67,7 @@ export default function Login() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { paddingHorizontal: spacing.xl, gap: spacing.md },
   petWrap: { alignItems: "center", marginBottom: spacing.md },
   title: { fontSize: 32, fontWeight: "800", color: colors.onSurface, textAlign: "center" },

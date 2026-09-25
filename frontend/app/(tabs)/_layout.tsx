@@ -1,15 +1,17 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
-import { colors, shadow } from "@/src/theme";
+import { useThemeStyles, ThemeColors, useTheme, shadow } from "@/src/theme";
 import { Icon, IconName } from "@/src/ui";
 import { useAddSheet } from "@/src/add-sheet";
 
 function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
+  const { colors } = useTheme();
   return <Icon name={name} size={24} color={focused ? colors.brandPrimary : colors.muted} />;
 }
 
 function AddButton() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const { open } = useAddSheet();
   return (
     <View style={styles.addWrap} pointerEvents="box-none">
@@ -22,6 +24,7 @@ function AddButton() {
 }
 
 export default function TabsLayout() {
+  const { colors } = useTheme();
   return (
     <Tabs
       screenOptions={{
@@ -41,7 +44,7 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   addWrap: { flex: 1, alignItems: "center", justifyContent: "flex-start" },
   addBtn: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", marginTop: -22, borderWidth: 4, borderColor: colors.surfaceSecondary, ...shadow.brand },
 });

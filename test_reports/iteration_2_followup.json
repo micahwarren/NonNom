@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "verified": [
+    "TypeScript compilation passes",
+    "Goal editor save dismisses to a single existing Profile; unique profile-goal-card",
+    "Goal editor cancel returns to Profile in dark mode",
+    "Dark-mode switch interaction fixed by removing disabled Pressable ancestor",
+    "Dark theme applies across screens and is persisted by AsyncStorage",
+    "Marshmallow shape and Cheese Head persisted through a new app/browser session",
+    "Checked cosmetics expose deterministic radio state and selected indicator",
+    "Happy and sad expressions rendered on the new shaped Nom",
+    "Test equipment restored to defaults and light mode restored"
+  ],
+  "transient_issue": "Backend hot reload interrupted one catalog request; read-only diagnosis verified recovery, subsequent end-to-end check passed.",
+  "known_limitations": [
+    "Native physical-device testing not performed",
+    "Demo account remains on Maintain weight after tester goal scenario; original exact profile snapshot unavailable",
+    "Existing repository-wide ESLint JSX apostrophe / set-state-in-effect findings remain; TypeScript and dedicated functional lint pass"
+  ]
+}

@@ -48,6 +48,24 @@
 - Speech-to-text (uses OS keyboard dictation)
 
 ## Tech
+### September 2026 — simplicity, expressive Noms, dark mode
+- Buddy: redundant Log Food/Scan Meal CTAs removed; one + 1 cup water action (250 mL, add/undo); personalized message moved to info sheet beside headline.
+- Log: removed Photo/Barcode/Describe/Search shortcut strip; center + still provides every entry method.
+- Progress: swipeable horizontal daily-history cards open the selected date; weight graph/start anchor preserved.
+- You: stacked subscription title/status/action; persistent Dark mode toggle. Reactive theme tokens now cover all screens, shared controls, navigation, sheets, charts, inputs, and status bar without remounting navigation.
+- Goal editing: completed users may revisit onboarding with edit=1; save returns to You; start weight remains unchanged. Unit switching converts existing inputs; clearing diet/weight goal is supported.
+- Wardrobe: six shapes (Classic, Marshmallow, Jelly Bean, Dumpling, Cloud Puff, Droplet), independent Shoes category (Barefoot, Fresh Kicks, Duck Slippers, Rocket Boots, Disco Skates), Cheese Head / Beer Can / Pancake / UFO hats, Overalls / Sleepy Stripes / Space Cadet / Super Nom / Captain Nom outfits, moustache / pool float / wings accessories. Existing premium/achievement access preserved.
+- All shapes use live expression states (happy, celebrating, neutral, sad/low protein, thirsty). Customization includes Today/Happy/Low energy expression previews; selection saves with a busy guard.
+- Implementation: `theme.ts` uses AsyncStorage + useSyncExternalStore; UI styles use memoized `useThemeStyles`; shape/extra art in `buddy-extras.tsx`, face art in `buddy-face.tsx`. Art is native RN views, not hosted image files.
+- Verified: TypeScript passes; backend regression 10/10; phone-size UI flows passed for simplified Buddy/Log, cup add/undo, advice popup, horizontal history, goal save/cancel, subscription formatting, and dark theme propagation/storage. Cosmetic selections persisted through a new app session. Reports: `test_reports/iteration_2.json` and `test_reports/iteration_2_followup.json`.
+- Follow-up fixes: saving edited goals dismisses to the existing You screen (avoids duplicate navigator/cards); switch rows use a non-disabled View wrapper; cosmetics expose selected/checked state and selected indicators; appearance subtitle exposes On/Off status. Confirmed with screenshots at 390x844, subscription also checked at 320px.
+- QA note: demo account's goal is currently Maintain weight after the tester's goal-editor scenario; exact prior profile snapshot was not retained. Equipment restored to defaults and light theme restored in test browser. Starting-weight anchor remains preserved; no existing food history was removed.
+
+## Current backlog
+- P0: No open functional blockers for this request. Physical-device native visual verification remains recommended; testing used mobile-sized Expo preview.
+- P1: Previously deferred social polish and remote push setup, unchanged by this request.
+- P2: Additional seasonal Nom accessories; provider-verified subscription webhooks.
+
 - Frontend: Expo 57, expo-router, reanimated, @react-native-vector-icons/ionicons, react-native-purchases, expo-camera, expo-image-picker, expo-sharing
 - Backend: FastAPI split into server.py / core.py / nutrition.py / routes_auth.py / routes_food.py / routes_tracking.py (legacy monolith in backend/legacy/)
 - Mongo collections: users (profile, targets, buddy.equipped, unlocked_cosmetics, achievements, notifications, privacy, plan), food_logs (meal, serving_label, quantity, data_source, source, barcode…), water_logs, exercise_logs, weight_logs, ai_usage, product_cache, search_cache, analytics_events

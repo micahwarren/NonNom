@@ -6,11 +6,13 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, Easing, FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { colors, fontSize, radius, shadow, spacing, touch } from "./theme";
+import { useThemeStyles, useTheme, ThemeColors, fontSize, radius, shadow, spacing, touch } from "./theme";
 
 export type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
-export function Icon({ name, size = 20, color = colors.onSurface }: { name: IconName; size?: number; color?: string }) {
+export function Icon({ name, size = 20, color }: { name: IconName; size?: number; color?: string }) {
+  const { colors } = useTheme();
+  color ??= colors.onSurface;
   return <Ionicons name={name} size={size} color={color} />;
 }
 
@@ -20,6 +22,7 @@ type ButtonProps = {
   size?: "md" | "lg" | "sm"; icon?: IconName; loading?: boolean; disabled?: boolean; style?: ViewStyle; testID?: string; accessibilityLabel?: string;
 };
 export function Button({ title, onPress, variant = "primary", size = "md", icon, loading, disabled, style, testID, accessibilityLabel }: ButtonProps) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   const bg = { primary: colors.brandPrimary, secondary: colors.surfaceSecondary, ghost: "transparent", danger: colors.error, dark: colors.surfaceInverse }[variant];
   const fg = { primary: colors.onBrandPrimary, secondary: colors.brandPrimary, ghost: colors.brandPrimary, danger: colors.onError, dark: colors.onSurfaceInverse }[variant];
   const h = size === "lg" ? touch.button + 4 : size === "sm" ? 38 : touch.button - 4;
@@ -42,7 +45,10 @@ export function Button({ title, onPress, variant = "primary", size = "md", icon,
   );
 }
 
-export function IconButton({ name, onPress, size = 40, color = colors.onSurface, bg = colors.surfaceSecondary, testID, label }: { name: IconName; onPress?: () => void; size?: number; color?: string; bg?: string; testID?: string; label?: string }) {
+export function IconButton({ name, onPress, size = 44, color, bg, testID, label }: { name: IconName; onPress?: () => void; size?: number; color?: string; bg?: string; testID?: string; label?: string }) {
+  const { colors } = useTheme();
+  color ??= colors.onSurface;
+  bg ??= colors.surfaceSecondary;
   return (
     <Pressable testID={testID} onPress={onPress} accessibilityRole="button" accessibilityLabel={label ?? name} hitSlop={6}
       style={({ pressed }) => [{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.7 : 1 }]}>
@@ -53,22 +59,25 @@ export function IconButton({ name, onPress, size = 40, color = colors.onSurface,
 
 // --- Card / layout --------------------------------------------------------------
 export function Card({ children, style, onPress, testID }: { children: React.ReactNode; style?: ViewStyle | ViewStyle[]; onPress?: () => void; testID?: string }) {
+  const { styles: s } = useThemeStyles(createStyles);
   if (onPress) {
     return <Pressable testID={testID} onPress={onPress} style={({ pressed }) => [s.card, style, pressed && { opacity: 0.85 }]}>{children}</Pressable>;
   }
   return <View testID={testID} style={[s.card, style]}>{children}</View>;
 }
 
-export function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+export function SectionTitle({ title, action, onAction, testID }: { title: string; action?: string; onAction?: () => void; testID?: string }) {
+  const { styles: s } = useThemeStyles(createStyles);
   return (
     <View style={s.sectionRow}>
       <Text style={s.sectionTitle}>{title}</Text>
-      {action && <Pressable onPress={onAction} hitSlop={8}><Text style={s.sectionAction}>{action}</Text></Pressable>}
+      {action && <Pressable testID={testID ?? `section-${title.toLowerCase().replace(/\s+/g, "-")}-action`} accessibilityRole="button" style={{ minHeight: 44, justifyContent: "center" }} onPress={onAction} hitSlop={4}><Text style={s.sectionAction}>{action}</Text></Pressable>}
     </View>
   );
 }
 
 export function ScreenHeader({ title, onBack, close, right, subtitle }: { title: string; onBack?: () => void; close?: boolean; right?: React.ReactNode; subtitle?: string }) {
+  const { styles: s } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   return (
     <View style={[s.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -83,7 +92,10 @@ export function ScreenHeader({ title, onBack, close, right, subtitle }: { title:
 }
 
 // --- Progress -----------------------------------------------------------------
-export function ProgressBar({ value, color = colors.brandPrimary, height = 10, track = colors.surfaceTertiary }: { value: number; color?: string; height?: number; track?: string }) {
+export function ProgressBar({ value, color, height = 10, track }: { value: number; color?: string; height?: number; track?: string }) {
+  const { colors } = useTheme();
+  color ??= colors.brandPrimary;
+  track ??= colors.surfaceTertiary;
   const w = useSharedValue(0);
   const pct = Math.max(0, Math.min(1, isFinite(value) ? value : 0));
   useEffect(() => { w.value = withTiming(pct, { duration: 600, easing: Easing.out(Easing.cubic) }); }, [pct]);
@@ -96,6 +108,7 @@ export function ProgressBar({ value, color = colors.brandPrimary, height = 10, t
 }
 
 export function MacroCard({ label, value, target, color, unit = "g", testID }: { label: string; value: number; target: number; color: string; unit?: string; testID?: string }) {
+  const { styles: s } = useThemeStyles(createStyles);
   const left = Math.max(0, target - value);
   return (
     <Card style={s.macroCard} testID={testID}>
@@ -110,7 +123,9 @@ export function MacroCard({ label, value, target, color, unit = "g", testID }: {
   );
 }
 
-export function StatCard({ label, value, sub, icon, color = colors.brandPrimary, testID, style }: { label: string; value: string; sub?: string; icon?: IconName; color?: string; testID?: string; style?: ViewStyle }) {
+export function StatCard({ label, value, sub, icon, color, testID, style }: { label: string; value: string; sub?: string; icon?: IconName; color?: string; testID?: string; style?: ViewStyle }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
+  color ??= colors.brandPrimary;
   return (
     <Card style={[s.statCard, style ?? {}]} testID={testID}>
       <View style={s.statTop}>
@@ -125,6 +140,7 @@ export function StatCard({ label, value, sub, icon, color = colors.brandPrimary,
 
 // --- States -----------------------------------------------------------------
 export function EmptyState({ icon = "leaf-outline", title, message, ctaTitle, onCta, compact }: { icon?: IconName; title: string; message?: string; ctaTitle?: string; onCta?: () => void; compact?: boolean }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <View style={[s.state, compact && { paddingVertical: spacing.lg }]}>
       <View style={s.stateIcon}><Icon name={icon} size={28} color={colors.brandPrimary} /></View>
@@ -136,6 +152,7 @@ export function EmptyState({ icon = "leaf-outline", title, message, ctaTitle, on
 }
 
 export function ErrorState({ message, onRetry, secondaryTitle, onSecondary, title = "Something went wrong", retryTitle = "Try again" }: { message: string; onRetry?: () => void; secondaryTitle?: string; onSecondary?: () => void; title?: string; retryTitle?: string }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <View style={s.state} testID="error-state">
       <View style={[s.stateIcon, { backgroundColor: colors.error + "1A" }]}><Icon name="alert-circle-outline" size={28} color={colors.error} /></View>
@@ -150,6 +167,7 @@ export function ErrorState({ message, onRetry, secondaryTitle, onSecondary, titl
 }
 
 export function Skeleton({ height = 16, width = "100%", radius: r = radius.sm, style }: { height?: number; width?: number | `${number}%`; radius?: number; style?: ViewStyle }) {
+  const { colors } = useTheme();
   const o = useSharedValue(0.5);
   useEffect(() => {
     const loop = () => { o.value = withTiming(o.value > 0.7 ? 0.5 : 1, { duration: 700 }, () => loop()); };
@@ -160,6 +178,7 @@ export function Skeleton({ height = 16, width = "100%", radius: r = radius.sm, s
 }
 
 export function LoadingState({ message, rows = 3 }: { message?: string; rows?: number }) {
+  const { styles: s } = useThemeStyles(createStyles);
   return (
     <View style={{ gap: spacing.md, padding: spacing.lg }} testID="loading-state">
       {message && <Text style={s.stateMsg}>{message}</Text>}
@@ -169,6 +188,7 @@ export function LoadingState({ message, rows = 3 }: { message?: string; rows?: n
 }
 
 export function PremiumBadge({ small }: { small?: boolean }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <View style={[s.premium, small && { paddingHorizontal: 6, paddingVertical: 2 }]}>
       <Icon name="sparkles" size={small ? 10 : 12} color={colors.onSurfaceInverse} />
@@ -178,6 +198,7 @@ export function PremiumBadge({ small }: { small?: boolean }) {
 }
 
 export function Chip({ label, selected, onPress, icon, testID }: { label: string; selected?: boolean; onPress?: () => void; icon?: IconName; testID?: string }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <Pressable testID={testID} onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }}
       style={({ pressed }) => [s.chip, selected && s.chipOn, pressed && { opacity: 0.8 }]}>
@@ -188,6 +209,7 @@ export function Chip({ label, selected, onPress, icon, testID }: { label: string
 }
 
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <View style={s.seg}>
       {options.map(o => (
@@ -213,6 +235,7 @@ export function MealPicker({ value, onChange }: { value: string; onChange: (m: "
 
 // --- Form ---------------------------------------------------------------------
 export function Field({ label, hint, style, ...rest }: TextInputProps & { label?: string; hint?: string }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <View style={{ gap: 6 }}>
       {label && <Text style={s.fieldLabel}>{label}</Text>}
@@ -223,20 +246,26 @@ export function Field({ label, hint, style, ...rest }: TextInputProps & { label?
 }
 
 export function Row({ icon, title, subtitle, onPress, right, danger, testID, iconColor }: { icon?: IconName; title: string; subtitle?: string; onPress?: () => void; right?: React.ReactNode; danger?: boolean; testID?: string; iconColor?: string }) {
-  return (
-    <Pressable testID={testID} onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : undefined} style={({ pressed }) => [s.row, pressed && { backgroundColor: colors.surface }]}>
+  const { colors, styles: s } = useThemeStyles(createStyles);
+  const content = (
+    <>
       {icon && <View style={[s.rowIcon, danger && { backgroundColor: colors.error + "1A" }]}><Icon name={icon} size={18} color={danger ? colors.error : iconColor ?? colors.brandPrimary} /></View>}
       <View style={{ flex: 1 }}>
         <Text style={[s.rowTitle, danger && { color: colors.error }]}>{title}</Text>
-        {subtitle && <Text style={s.rowSub}>{subtitle}</Text>}
+        {subtitle && <Text testID={testID ? `${testID}-subtitle` : undefined} style={s.rowSub}>{subtitle}</Text>}
       </View>
       {right ?? (onPress ? <Icon name="chevron-forward" size={18} color={colors.muted} /> : null)}
-    </Pressable>
+    </>
   );
+  // Non-action rows may contain active Switch controls: never put them under
+  // a disabled Pressable, which disables descendants in accessibility tools.
+  if (!onPress) return <View testID={testID} style={s.row}>{content}</View>;
+  return <Pressable testID={testID} onPress={onPress} accessibilityRole="button" style={({ pressed }) => [s.row, pressed && { backgroundColor: colors.surface }]}>{content}</Pressable>;
 }
 
 // --- Sheet (bottom sheet built on Modal for cross-platform reliability) -------
-export function Sheet({ visible, onClose, title, children, scroll = true }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode; scroll?: boolean }) {
+export function Sheet({ visible, onClose, title, children, scroll = true, testID = "bottom-sheet" }: { visible: boolean; onClose: () => void; title?: string; children: React.ReactNode; scroll?: boolean; testID?: string }) {
+  const { styles: s } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const y = useSharedValue(400);
   useEffect(() => { if (visible) y.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) }); else y.value = 400; }, [visible]);
@@ -245,8 +274,8 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: { vi
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <Pressable style={s.backdrop} onPress={onClose} accessibilityLabel="Close sheet" />
-        <Animated.View style={[s.sheet, { paddingBottom: insets.bottom + spacing.lg }, st]}>
+        <Pressable testID={`${testID}-backdrop`} style={s.backdrop} onPress={onClose} accessibilityLabel="Close sheet" />
+        <Animated.View testID={testID} accessibilityViewIsModal style={[s.sheet, { paddingBottom: insets.bottom + spacing.lg }, st]}>
           <View style={s.grabber} />
           {title && <Text style={s.sheetTitle}>{title}</Text>}
           <Body style={{ maxHeight: 560 }} contentContainerStyle={scroll ? { gap: spacing.sm } : undefined} keyboardShouldPersistTaps="handled">{children}</Body>
@@ -260,6 +289,7 @@ export function Sheet({ visible, onClose, title, children, scroll = true }: { vi
 type ToastCtx = { show: (msg: string, opts?: { icon?: IconName; actionTitle?: string; onAction?: () => void }) => void };
 const ToastContext = createContext<ToastCtx>({ show: () => {} });
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   const [toast, setToast] = useState<{ msg: string; icon?: IconName; actionTitle?: string; onAction?: () => void } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
@@ -289,7 +319,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 export const useToast = () => useContext(ToastContext);
 
 // --- styles ------------------------------------------------------------------
-const s = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   btn: { borderRadius: radius.pill, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
   btnInner: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   btnText: { fontWeight: "700" },

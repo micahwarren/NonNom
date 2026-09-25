@@ -2,19 +2,21 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "./theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "./theme";
 import { Button, Chip, Field, Icon, MealPicker, Sheet, useToast } from "./ui";
 import { AiItem, api, DbFood, FoodEntry, FoodItemIn, Meal, fileUrl } from "./api";
 import { useAuthToken } from "./auth-context";
 import { track } from "./analytics";
 
 export function SourceTag({ source }: { source: string }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   const label = source === "database" ? "Database" : source === "ai_estimate" ? "AI estimate" : "Manual";
   const color = source === "database" ? colors.success : source === "ai_estimate" ? colors.protein : colors.muted;
   return <View style={[s.tag, { borderColor: color + "66" }]}><Text style={[s.tagText, { color }]}>{label}</Text></View>;
 }
 
 export function MacroLine({ p, c, f, size = fontSize.xs }: { p: number; c: number; f: number; size?: number }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   return (
     <Text style={[s.macroLine, { fontSize: size }]}>
       <Text style={{ color: colors.protein }}>P {Math.round(p)}g</Text> · <Text style={{ color: colors.carbs }}>C {Math.round(c)}g</Text> · <Text style={{ color: colors.fat }}>F {Math.round(f)}g</Text>
@@ -23,6 +25,7 @@ export function MacroLine({ p, c, f, size = fontSize.xs }: { p: number; c: numbe
 }
 
 export function FoodRow({ item, onPress, testID }: { item: FoodEntry; onPress?: () => void; testID?: string }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   const token = useAuthToken();
   return (
     <Pressable testID={testID} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${item.name}, ${item.calories} calories`} style={({ pressed }) => [s.row, pressed && { backgroundColor: colors.surface }]}>
@@ -42,6 +45,7 @@ export function FoodRow({ item, onPress, testID }: { item: FoodEntry; onPress?: 
 
 // --- Edit an existing entry -------------------------------------------------------
 export function EditFoodSheet({ item, onClose, onChanged }: { item: FoodEntry | null; onClose: () => void; onChanged: () => void }) {
+  const { styles: s } = useThemeStyles(createStyles);
   const toast = useToast();
   const [qty, setQty] = useState("1");
   const [meal, setMeal] = useState<Meal>("lunch");
@@ -100,6 +104,7 @@ export function EditFoodSheet({ item, onClose, onChanged }: { item: FoodEntry | 
 
 // --- Confirm a database product (search / barcode) -------------------------------
 export function DbFoodSheet({ food, onClose, onLogged, source }: { food: DbFood | null; onClose: () => void; onLogged: () => void; source: "search" | "barcode" }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   const toast = useToast();
   const [qty, setQty] = useState("1");
   const [unit, setUnit] = useState<"serving" | "100g">("serving");
@@ -166,7 +171,9 @@ export function DbFoodSheet({ food, onClose, onLogged, source }: { food: DbFood 
   );
 }
 
-function Nutri({ label, v, color = colors.onSurface, big }: { label: string; v: string; color?: string; big?: boolean }) {
+function Nutri({ label, v, color, big }: { label: string; v: string; color?: string; big?: boolean }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
+  color ??= colors.onSurface;
   return (
     <View style={s.nutri}>
       <Text style={[s.nutriV, { color, fontSize: big ? fontSize.xl : fontSize.lg }]}>{v}</Text>
@@ -177,6 +184,7 @@ function Nutri({ label, v, color = colors.onSurface, big }: { label: string; v: 
 
 // --- Confirm AI-detected items before logging -----------------------------------
 export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onDone, onCancel, source }: { items: AiItem[]; meal: Meal; imagePath?: string | null; onDone: () => void; onCancel: () => void; source: "photo" | "describe" }) {
+  const { colors, styles: s } = useThemeStyles(createStyles);
   const toast = useToast();
   const router = useRouter();
   const [items, setItems] = useState(initial.map(i => ({ ...i, qty: "1" })));
@@ -245,7 +253,7 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, onD
   );
 }
 
-const s = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   thumb: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.skeleton, marginRight: spacing.md },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 64 },
   rowName: { fontSize: fontSize.md, fontWeight: "700", color: colors.onSurface },

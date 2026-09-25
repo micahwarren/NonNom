@@ -1,9 +1,11 @@
 // Buddy — the NomNom character. Pure RN views + reanimated, cosmetics rendered from data so new items need no UI rewrite.
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "./theme";
+import { colors, useTheme } from "./theme";
+import { BuddyFace } from "./buddy-face";
+import { ExtraAccessory, ExtraHat, ExtraOutfit, NomShoes, nomShape, ShapeDetails } from "./buddy-extras";
 import { Icon } from "./ui";
 import type { BuddyState, Equipped } from "./api";
 
@@ -23,7 +25,7 @@ const BACKGROUNDS: Record<string, string[]> = {
   bg_forest: ["#B7E4C7", "#52B788"], bg_night: ["#3A3D5C", "#1E2038"], bg_confetti: ["#FFE1F0", "#D9F0FF"],
 };
 
-export const DEFAULT_EQUIPPED: Equipped = { skin: "skin_classic", hat: "hat_none", glasses: "glasses_none", accessory: "acc_none", outfit: "outfit_none", background: "bg_cream" };
+export const DEFAULT_EQUIPPED: Equipped = { skin: "skin_classic", hat: "hat_none", glasses: "glasses_none", accessory: "acc_none", outfit: "outfit_none", background: "bg_cream", shape: "shape_round", shoes: "shoes_none" };
 
 type Props = { state?: BuddyState; equipped?: Partial<Equipped>; size?: number; animate?: boolean; showBackground?: boolean; level?: number; testID?: string };
 
@@ -41,16 +43,20 @@ export function levelTier(level: number) {
 }
 
 export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate = true, showBackground = true, level = 1, testID }: Props) {
+  const { scheme } = useTheme();
   const tier = levelTier(level);
   const eq = { ...DEFAULT_EQUIPPED, ...(equipped ?? {}) };
   const u = size / 100; // unit
   const skin = SKINS[eq.skin] ?? SKINS.skin_classic;
-  const bg = BACKGROUNDS[eq.background] ?? BACKGROUNDS.bg_cream;
+  const bg = scheme === "dark" && eq.background === "bg_cream" ? ["#363340", "#242B38"] : BACKGROUNDS[eq.background] ?? BACKGROUNDS.bg_cream;
+  const shape = nomShape(eq.shape, u);
 
   const y = useSharedValue(0);
   const sc = useSharedValue(1);
   const rot = useSharedValue(0);
   useEffect(() => {
+    cancelAnimation(y); cancelAnimation(sc); cancelAnimation(rot);
+    y.value = 0; sc.value = 1; rot.value = 0;
     if (!animate) return;
     if (state === "celebrating" || state === "excellent") {
       y.value = withRepeat(withSequence(withTiming(-6 * u, { duration: 450, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 450, easing: Easing.in(Easing.quad) })), -1, false);
@@ -65,15 +71,12 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
       sc.value = withRepeat(withSequence(withTiming(1.015, { duration: 1200 }), withTiming(1, { duration: 1200 })), -1, false);
       rot.value = 0;
     }
-  }, [state, animate]);
+    return () => { cancelAnimation(y); cancelAnimation(sc); cancelAnimation(rot); };
+  }, [state, animate, u, y, sc, rot]);
   const bodyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }, { scale: sc.value }, { rotate: `${rot.value}deg` }] }));
 
-  const tired = state === "tired";
-  const happy = state === "celebrating" || state === "excellent" || state === "doing_well";
-  const eyeH = tired ? 7 * u : 13 * u;
-
   return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }} testID={testID} accessibilityLabel={`Buddy is ${state.replace("_", " ")}`}>
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }} testID={testID} accessibilityRole="image" accessibilityLabel={`${eq.shape.replace("shape_", "")} Nom is ${state.replace(/_/g, " ")}`}>
       {showBackground && <LinearGradient colors={bg as [string, string]} style={{ position: "absolute", width: size, height: size, borderRadius: size / 2 }} />}
       {eq.background === "bg_confetti" && showBackground && [0, 1, 2, 3, 4].map(i => (
         <View key={i} style={{ position: "absolute", width: 6 * u, height: 6 * u, borderRadius: 2 * u, backgroundColor: [colors.brandPrimary, colors.carbs, colors.water, colors.protein, colors.success][i], top: (12 + i * 15) * u, left: (10 + ((i * 37) % 80)) * u, transform: [{ rotate: `${i * 30}deg` }] }} />
@@ -91,33 +94,20 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
         <Animated.View key={i} style={{ position: "absolute", top: (6 + i * 8) * u, left: (12 + i * 34) * u }}><Icon name="sparkles" size={10 * u} color={colors.carbs} /></Animated.View>
       ))}
       <Animated.View style={[{ width: 64 * u, height: 60 * u, marginTop: 8 * u }, bodyStyle]}>
+        <ExtraAccessory id={eq.accessory} u={u} behind />
+        <ShapeDetails shape={eq.shape === "shape_cloud" ? eq.shape : ""} u={u} body={skin.body} />
         {/* body */}
-        <View style={{ width: 64 * u, height: 60 * u, borderRadius: 32 * u, backgroundColor: skin.body, alignItems: "center", overflow: "visible", ...styles.bodyShadow }}>
-          <Outfit id={eq.outfit} u={u} />
+        <View style={[{ width: 64 * u, height: 60 * u, backgroundColor: skin.body, alignItems: "center", overflow: "visible", ...styles.bodyShadow }, shape]}>
+          <View style={[StyleSheet.absoluteFill, shape, { overflow: "hidden" }]}><Outfit id={eq.outfit} u={u} /></View>
+          <ShapeDetails shape={eq.shape === "shape_dumpling" ? eq.shape : ""} u={u} body={skin.body} />
           {tier.sheen && <View style={{ position: "absolute", top: 6 * u, left: 12 * u, width: 16 * u, height: 8 * u, borderRadius: 8 * u, backgroundColor: WHITE, opacity: 0.45, transform: [{ rotate: "-20deg" }] }} />}
-          {tier.legendary && <View style={{ position: "absolute", width: 64 * u, height: 60 * u, borderRadius: 32 * u, borderWidth: 2.5 * u, borderColor: colors.premium }} />}
-          {/* eyes */}
-          <View style={{ flexDirection: "row", gap: 16 * u, marginTop: 20 * u }}>
-            {[0, 1].map(i => (
-              <View key={i} style={{ width: 9 * u, height: eyeH, borderRadius: 5 * u, backgroundColor: INK, alignItems: "center", justifyContent: "flex-start", paddingTop: 2 * u }}>
-                {!tired && <View style={{ width: 3.5 * u, height: 3.5 * u, borderRadius: 2 * u, backgroundColor: WHITE }} />}
-              </View>
-            ))}
-          </View>
-          {/* cheeks */}
-          <View style={{ position: "absolute", top: 33 * u, flexDirection: "row", gap: 30 * u }}>
-            {[0, 1].map(i => <View key={i} style={{ width: 9 * u, height: 5 * u, borderRadius: 3 * u, backgroundColor: skin.cheek, opacity: 0.75 }} />)}
-          </View>
-          {/* mouth */}
-          <View style={{ marginTop: 4 * u }}>
-            {happy && <View style={{ width: 18 * u, height: 9 * u, borderBottomWidth: 2.2 * u, borderLeftWidth: 2.2 * u, borderRightWidth: 2.2 * u, borderColor: INK, borderRadius: 12 * u }} />}
-            {(state === "neutral" || state === "needs_hydration" || state === "needs_protein") && <View style={{ width: 12 * u, height: 5 * u, borderBottomWidth: 2 * u, borderLeftWidth: 2 * u, borderRightWidth: 2 * u, borderColor: INK, borderRadius: 8 * u }} />}
-            {tired && <View style={{ width: 10 * u, height: 2 * u, borderRadius: u, backgroundColor: INK, marginTop: 2 * u }} />}
-          </View>
+          {tier.legendary && <View style={[{ position: "absolute", width: 64 * u, height: 60 * u, borderWidth: 2.5 * u, borderColor: colors.premium }, shape]} />}
+          <BuddyFace state={state} u={u} cheek={skin.cheek} midnight={eq.skin === "skin_midnight"} testID={testID ? `${testID}-expression` : undefined} />
           <Glasses id={eq.glasses} u={u} />
           <Accessory id={eq.accessory} u={u} />
         </View>
         <Hat id={eq.hat} u={u} />
+        <NomShoes id={eq.shoes} u={u} />
         {/* contextual prop */}
         {state === "needs_hydration" && <View style={[styles.prop, { right: -8 * u, top: 28 * u, width: 20 * u, height: 20 * u, borderRadius: 10 * u }]}><Icon name="water" size={12 * u} color={colors.water} /></View>}
         {state === "needs_protein" && <View style={[styles.prop, { right: -8 * u, top: 28 * u, width: 20 * u, height: 20 * u, borderRadius: 10 * u }]}><Icon name="nutrition" size={12 * u} color={colors.protein} /></View>}
@@ -152,7 +142,7 @@ function Hat({ id, u }: { id: string; u: number }) {
     case "hat_party": return (<View style={{ position: "absolute", top: top - 12 * u, left: 24 * u, alignItems: "center" }}>
       <View style={{ width: 0, height: 0, borderLeftWidth: 9 * u, borderRightWidth: 9 * u, borderBottomWidth: 24 * u, borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: colors.protein }} />
       <View style={{ position: "absolute", top: -3 * u, width: 6 * u, height: 6 * u, borderRadius: 3 * u, backgroundColor: colors.carbs }} /></View>);
-    default: return null;
+    default: return <ExtraHat id={id} u={u} />;
   }
 }
 
@@ -184,12 +174,13 @@ function Accessory({ id, u }: { id: string; u: number }) {
       <View style={{ width: 0, height: 0, borderTopWidth: 5 * u, borderBottomWidth: 5 * u, borderRightWidth: 9 * u, borderTopColor: "transparent", borderBottomColor: "transparent", borderRightColor: colors.error }} />
       <View style={{ width: 4 * u, height: 4 * u, borderRadius: 2 * u, backgroundColor: "#C93A5B" }} />
       <View style={{ width: 0, height: 0, borderTopWidth: 5 * u, borderBottomWidth: 5 * u, borderLeftWidth: 9 * u, borderTopColor: "transparent", borderBottomColor: "transparent", borderLeftColor: colors.error }} /></View>);
-    default: return null;
+    default: return <ExtraAccessory id={id} u={u} />;
   }
 }
 
 function Outfit({ id, u }: { id: string; u: number }) {
   if (id === "outfit_none") return null;
+  if (!["outfit_hoodie", "outfit_gym", "outfit_business", "outfit_chef", "outfit_athlete"].includes(id)) return <ExtraOutfit id={id} u={u} />;
   const color = { outfit_hoodie: "#8D99AE", outfit_gym: "#2B2D42", outfit_business: "#3A4A6B", outfit_chef: WHITE, outfit_athlete: colors.water }[id] ?? colors.muted;
   return (
     <View style={{ position: "absolute", bottom: 0, width: 64 * u, height: 22 * u, borderBottomLeftRadius: 32 * u, borderBottomRightRadius: 32 * u, backgroundColor: color, overflow: "hidden", alignItems: "center" }}>

@@ -2,20 +2,14 @@ import React, { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, spacing } from "@/src/theme";
 import { api, FoodDay, FoodEntry, Meal } from "@/src/api";
-import { Card, EmptyState, ErrorState, Icon, IconName, IconButton, LoadingState, MEALS } from "@/src/ui";
+import { Card, EmptyState, ErrorState, Icon, IconButton, LoadingState, MEALS } from "@/src/ui";
 import { EditFoodSheet, FoodRow } from "@/src/food-components";
 import { dayName, todayISO } from "@/src/units";
 
-const QUICK: { icon: IconName; label: string; route: string; testID: string }[] = [
-  { icon: "camera", label: "Photo", route: "/scan", testID: "quick-photo" },
-  { icon: "barcode", label: "Barcode", route: "/barcode", testID: "quick-barcode" },
-  { icon: "mic", label: "Describe", route: "/describe", testID: "quick-describe" },
-  { icon: "search", label: "Search", route: "/search", testID: "quick-search" },
-];
-
 export default function LogScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
@@ -55,17 +49,6 @@ export default function LogScreen() {
           <Stat label="Meals" value={`${day?.count ?? 0}`} unit={day?.count === 1 ? "item" : "items"} />
         </Card>
 
-        {isToday && (
-          <View style={styles.quickRow}>
-            {QUICK.map(q => (
-              <Pressable key={q.label} testID={q.testID} onPress={() => router.push(q.route as any)} style={({ pressed }) => [styles.quick, pressed && { opacity: 0.8 }]} accessibilityRole="button" accessibilityLabel={q.label}>
-                <View style={styles.quickIcon}><Icon name={q.icon} size={20} color={colors.brandPrimary} /></View>
-                <Text style={styles.quickLabel}>{q.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
         {loading ? <LoadingState rows={3} /> : err ? <ErrorState message={err} onRetry={load} /> : (
           <>
             {day && day.count === 0 && (
@@ -99,7 +82,9 @@ export default function LogScreen() {
   );
 }
 
-function Stat({ label, value, unit, color = colors.onSurface }: { label: string; value: string; unit: string; color?: string }) {
+function Stat({ label, value, unit, color }: { label: string; value: string; unit: string; color?: string }) {
+  const { colors, styles } = useThemeStyles(createStyles);
+  color ??= colors.onSurface;
   return (
     <View style={{ flex: 1, alignItems: "center" }}>
       <Text style={[styles.statV, { color }]}>{value}<Text style={styles.statU}> {unit}</Text></Text>
@@ -108,7 +93,7 @@ function Stat({ label, value, unit, color = colors.onSurface }: { label: string;
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { paddingHorizontal: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl },
   headerRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   title: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface, letterSpacing: -0.5 },
@@ -118,10 +103,6 @@ const styles = StyleSheet.create({
   statV: { fontSize: fontSize.xl, fontWeight: "800" },
   statU: { fontSize: fontSize.xs, color: colors.muted, fontWeight: "600" },
   statL: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 2 },
-  quickRow: { flexDirection: "row", gap: spacing.sm },
-  quick: { flex: 1, alignItems: "center", gap: 6, paddingVertical: spacing.sm },
-  quickIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
-  quickLabel: { fontSize: fontSize.xs, fontWeight: "700", color: colors.onSurface },
   mealCard: { padding: 0, overflow: "hidden" },
   mealHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xs },
   mealTitle: { fontSize: fontSize.md, fontWeight: "800", color: colors.onSurface },

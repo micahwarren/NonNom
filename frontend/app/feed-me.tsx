@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api, Meal, Suggestion, Targets } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar } from "@/src/buddy";
@@ -10,6 +10,7 @@ import { MacroLine, SourceTag } from "@/src/food-components";
 import { track } from "@/src/analytics";
 
 export default function FeedMe() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
@@ -111,11 +112,14 @@ export default function FeedMe() {
   );
 }
 
-function Big({ v, l, c = colors.onSurface }: { v: string; l: string; c?: string }) {
+function Big({ v, l, c }: { v: string; l: string; c?: string }) {
+  const { colors, styles } = useThemeStyles(createStyles);
+  c ??= colors.onSurfaceInverse;
   return <View><Text style={[styles.big, { color: c }]}>{v}</Text><Text style={styles.bigL}>{l}</Text></View>;
 }
 
 export function RecipeBody({ s }: { s: Suggestion | null }) {
+  const { styles } = useThemeStyles(createStyles);
   if (!s) return null;
   return (
     <View style={{ gap: spacing.sm }}>
@@ -134,7 +138,7 @@ export function RecipeBody({ s }: { s: Suggestion | null }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   secLabel: { fontSize: fontSize.xs, fontWeight: "800", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
   ingRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
   ingAmount: { width: 120, fontSize: fontSize.sm, fontWeight: "800", color: colors.onSurface },

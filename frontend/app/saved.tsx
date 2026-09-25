@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import { colors, fontSize, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, spacing } from "@/src/theme";
 import { api, Meal, SavedMeal } from "@/src/api";
 import { Button, Card, EmptyState, ErrorState, MealPicker, ScreenHeader, Sheet, Skeleton, useToast } from "@/src/ui";
 import { MacroLine, SourceTag } from "@/src/food-components";
@@ -9,6 +9,7 @@ import { RecipeBody } from "./feed-me";
 import { track } from "@/src/analytics";
 
 export default function SavedMeals() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
   const [items, setItems] = useState<SavedMeal[] | null>(null);
@@ -71,7 +72,7 @@ export default function SavedMeals() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   name: { fontSize: fontSize.lg, fontWeight: "800", color: colors.onSurface },
   desc: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   cal: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface },

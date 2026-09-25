@@ -1,6 +1,7 @@
 // NomNom design tokens. Warm, playful, tactile light theme.
-import { useMemo } from "react";
-import { Appearance, StyleSheet, useColorScheme } from "react-native";
+import { useMemo, useSyncExternalStore } from "react";
+import { Appearance, StyleSheet } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ColorScheme = "light" | "dark";
 
@@ -56,17 +57,52 @@ const light = {
 
 export type ThemeColors = typeof light;
 export const defaultScheme = "light" satisfies ColorScheme;
-export const themes: { light: ThemeColors; dark?: ThemeColors } = { light };
+const dark: ThemeColors = {
+  ...light,
+  surface: "#13171F", onSurface: "#F2F3F7",
+  surfaceSecondary: "#1E2430", onSurfaceSecondary: "#F2F3F7",
+  surfaceTertiary: "#30303B", onSurfaceTertiary: "#F2F3F7",
+  surfaceInverse: "#343F53", onSurfaceInverse: "#FFFFFF",
+  muted: "#9BA6BB", textSecondary: "#BFC7D6",
+  brand: "#FF897F", brandPrimary: "#FF897F", onBrand: "#211A20", onBrandPrimary: "#211A20",
+  brandTertiary: "#B8776C", onBrandTertiary: "#FFFFFF",
+  border: "#323A49", borderStrong: "#586377", divider: "#323A49",
+  protein: "#B49AFF", carbs: "#F9C365", fat: "#65DACB", water: "#72BDFF",
+  premium: "#E3B760", calories: "#FF897F", error: "#FF7C98",
+  overlay: "rgba(0,0,0,0.65)", skeleton: "#303949",
+};
+export const themes: Record<ColorScheme, ThemeColors> = { light, dark };
+const THEME_KEY = "nomnom-color-scheme";
+let currentScheme: ColorScheme = defaultScheme;
+let ready = false;
+const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+const notify = () => listeners.forEach(listener => listener());
 
-export function setColorScheme(scheme: ColorScheme | null) {
-  Appearance.setColorScheme?.(scheme ?? "unspecified");
+export const themeReady = AsyncStorage.getItem(THEME_KEY).then(saved => {
+  if (saved === "dark" || saved === "light") currentScheme = saved;
+  Appearance.setColorScheme?.(currentScheme);
+}).catch(() => {}).finally(() => { ready = true; notify(); });
+
+export async function setColorScheme(scheme: ColorScheme | null) {
+  const next = scheme ?? defaultScheme;
+  // Persist before publishing so failed writes never pretend the choice was saved.
+  await AsyncStorage.setItem(THEME_KEY, next);
+  currentScheme = next;
+  Appearance.setColorScheme?.(next);
+  notify();
 }
-setColorScheme?.(themes.dark ? null : defaultScheme);
 
-export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
-  const system = useColorScheme();
-  const scheme: ColorScheme = system && system !== "unspecified" && themes[system as ColorScheme] ? (system as ColorScheme) : defaultScheme;
-  return { scheme, colors: themes[scheme] ?? themes.light };
+export function useTheme() {
+  const scheme = useSyncExternalStore<ColorScheme>(subscribe, () => currentScheme, () => defaultScheme);
+  const isReady = useSyncExternalStore(subscribe, () => ready, () => false);
+  return { scheme, colors: themes[scheme], ready: isReady, setColorScheme };
+}
+
+export function useThemeStyles<T>(factory: (colors: ThemeColors) => T) {
+  const theme = useTheme();
+  const styles = useMemo(() => factory(theme.colors), [factory, theme.colors]);
+  return { ...theme, styles };
 }
 
 export const spacing = {

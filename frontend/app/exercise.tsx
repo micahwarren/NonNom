@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, spacing } from "@/src/theme";
 import { api } from "@/src/api";
 import { Button, Card, Chip, Field, ScreenHeader, useToast } from "@/src/ui";
 import { track } from "@/src/analytics";
@@ -9,6 +9,7 @@ import { track } from "@/src/analytics";
 const PRESETS = ["Walking", "Running", "Cycling", "Strength", "Yoga", "Swimming", "HIIT", "Other"];
 
 export default function ExerciseScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
   const [activity, setActivity] = useState("Walking");
@@ -45,4 +46,4 @@ export default function ExerciseScreen() {
   );
 }
 
-const styles = StyleSheet.create({ sub: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "600" } });
+const createStyles = (colors: ThemeColors) => StyleSheet.create({ sub: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: "600" } });

@@ -3,7 +3,7 @@ import { Linking, Platform, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { api, DbFood } from "@/src/api";
 import { Button, Card, ErrorState, Field, Icon, ScreenHeader } from "@/src/ui";
 import { DbFoodSheet } from "@/src/food-components";
@@ -13,6 +13,7 @@ import { track } from "@/src/analytics";
 type Status = "idle" | "looking" | "found" | "notfound" | "error";
 
 export default function BarcodeScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [status, setStatus] = useState<Status>("idle");
@@ -95,7 +96,7 @@ export default function BarcodeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   cameraWrap: { marginHorizontal: spacing.lg, height: 300, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.surfaceInverse, alignItems: "center", justifyContent: "center" },
   noCam: { alignItems: "center", gap: spacing.md, padding: spacing.xl },
   noCamText: { color: colors.onSurfaceInverse, textAlign: "center", fontSize: fontSize.sm, opacity: 0.85, lineHeight: 20 },

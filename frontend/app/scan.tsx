@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Image, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { colors, fontSize, radius, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
 import { AiItem, api, Meal } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar } from "@/src/buddy";
@@ -11,6 +11,7 @@ import { ConfirmItems } from "@/src/food-components";
 import { track } from "@/src/analytics";
 
 export default function Scan() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { user, isPremium } = useAuth();
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -108,7 +109,7 @@ export default function Scan() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   limit: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: colors.surfaceTertiary, paddingLeft: spacing.lg, paddingRight: spacing.xs, paddingVertical: spacing.xs, borderRadius: radius.pill },
   limitText: { fontWeight: "700", color: colors.onSurface, fontSize: fontSize.sm },
   preview: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, height: 300, overflow: "hidden", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },

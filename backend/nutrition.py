@@ -361,6 +361,18 @@ def _c(id, name, category, unlock="free", premium=False, sort=0, asset=None):
 
 
 COSMETICS = [
+    # Shapes and footwear are independent of color and clothing; old users keep round Noms.
+    _c("shape_round", "Classic Nom", "shape", sort=0),
+    _c("shape_squircle", "Marshmallow", "shape", sort=1),
+    _c("shape_bean", "Jelly Bean", "shape", sort=2),
+    _c("shape_dumpling", "Dumpling", "shape", sort=3),
+    _c("shape_cloud", "Cloud Puff", "shape", "premium", True, 4),
+    _c("shape_drop", "Little Droplet", "shape", "premium", True, 5),
+    _c("shoes_none", "Barefoot", "shoes", sort=0),
+    _c("shoes_sneakers", "Fresh Kicks", "shoes", sort=1),
+    _c("shoes_duck", "Duck Slippers", "shoes", sort=2),
+    _c("shoes_rocket", "Rocket Boots", "shoes", "premium", True, 3),
+    _c("shoes_skates", "Disco Skates", "shoes", "premium", True, 4),
     # skins
     _c("skin_classic", "Classic", "skin", sort=0), _c("skin_peach", "Peach", "skin", sort=1),
     _c("skin_strawberry", "Strawberry", "skin", "premium", True, 2), _c("skin_blueberry", "Blueberry", "skin", "premium", True, 3),
@@ -370,6 +382,10 @@ COSMETICS = [
     _c("hat_beanie", "Beanie", "hat", "premium", True, 2), _c("hat_cowboy", "Cowboy Hat", "hat", "premium", True, 3),
     _c("hat_chef", "Chef Hat", "hat", "premium", True, 4), _c("hat_crown", "Crown", "hat", "premium", True, 5),
     _c("hat_party", "Party Hat", "hat", "premium", True, 6), _c("hat_gold_crown", "Gold Crown", "hat", "achievement", False, 7),
+    _c("hat_cheese", "Cheese Head", "hat", sort=8),
+    _c("hat_beer", "Beer Can Hat", "hat", sort=9),
+    _c("hat_pancakes", "Pancake Stack", "hat", sort=10),
+    _c("hat_ufo", "UFO Pilot", "hat", "premium", True, 11),
     # glasses
     _c("glasses_none", "None", "glasses", sort=0), _c("glasses_round", "Round Glasses", "glasses", sort=1),
     _c("glasses_sun", "Sunglasses", "glasses", "premium", True, 2), _c("glasses_star", "Star Shades", "glasses", "premium", True, 3),
@@ -378,10 +394,18 @@ COSMETICS = [
     _c("acc_headphones", "Headphones", "accessory", "premium", True, 2), _c("acc_backpack", "Backpack", "accessory", "premium", True, 3),
     _c("acc_headband", "NomNom Headband", "accessory", "achievement", False, 4), _c("acc_sweatband", "Sweatband", "accessory", "achievement", False, 5),
     _c("acc_bowtie", "Bow Tie", "accessory", "premium", True, 6),
+    _c("acc_moustache", "Sir Nom", "accessory", sort=7),
+    _c("acc_floatie", "Pool Party", "accessory", "premium", True, 8),
+    _c("acc_wings", "Tiny Wings", "accessory", "premium", True, 9),
     # outfits
     _c("outfit_none", "None", "outfit", sort=0), _c("outfit_hoodie", "Hoodie", "outfit", "premium", True, 1),
     _c("outfit_gym", "Gym Outfit", "outfit", "premium", True, 2), _c("outfit_business", "Business", "outfit", "premium", True, 3),
     _c("outfit_chef", "Chef", "outfit", "premium", True, 4), _c("outfit_athlete", "Athlete", "outfit", "premium", True, 5),
+    _c("outfit_denim", "Overalls", "outfit", sort=6),
+    _c("outfit_pajamas", "Sleepy Stripes", "outfit", sort=7),
+    _c("outfit_astronaut", "Space Cadet", "outfit", "premium", True, 8),
+    _c("outfit_superhero", "Super Nom", "outfit", "premium", True, 9),
+    _c("outfit_pirate", "Captain Nom", "outfit", "premium", True, 10),
     # backgrounds
     _c("bg_cream", "Cream", "background", sort=0), _c("bg_sunrise", "Sunrise", "background", sort=1),
     _c("bg_ocean", "Ocean", "background", "premium", True, 2), _c("bg_forest", "Forest", "background", "premium", True, 3),
@@ -389,7 +413,7 @@ COSMETICS = [
 ]
 COSMETIC_BY_ID = {c["id"]: c for c in COSMETICS}
 DEFAULT_EQUIPPED = {"skin": "skin_classic", "hat": "hat_none", "glasses": "glasses_none",
-                    "accessory": "acc_none", "outfit": "outfit_none", "background": "bg_cream"}
+                    "accessory": "acc_none", "outfit": "outfit_none", "background": "bg_cream", "shape": "shape_round", "shoes": "shoes_none"}
 
 
 def cosmetic_available(c: dict, user: dict) -> bool:

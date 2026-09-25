@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, fontSize, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, spacing } from "@/src/theme";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { Button, Card, Field, ScreenHeader, Segmented, useToast } from "@/src/ui";
@@ -9,6 +9,7 @@ import { fmtWeight, weightToKg, weightValue } from "@/src/units";
 import { track } from "@/src/analytics";
 
 export default function WeightScreen() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
   const { user, refresh } = useAuth();
@@ -43,4 +44,4 @@ export default function WeightScreen() {
   );
 }
 
-const styles = StyleSheet.create({ sub: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: "600" } });
+const createStyles = (colors: ThemeColors) => StyleSheet.create({ sub: { fontSize: fontSize.sm, color: colors.textSecondary, fontWeight: "600" } });

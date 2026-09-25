@@ -1,11 +1,12 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { colors, fontSize, spacing } from "@/src/theme";
+import { useThemeStyles, ThemeColors, fontSize, spacing } from "@/src/theme";
 import { Card, ScreenHeader } from "@/src/ui";
 
 // Placeholder legal copy. Set EXPO_PUBLIC_TERMS_URL / EXPO_PUBLIC_PRIVACY_URL to link to your hosted documents instead.
 export default function Legal() {
+  const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const { doc } = useLocalSearchParams<{ doc?: string }>();
   const isTerms = doc === "terms";
@@ -27,7 +28,7 @@ export default function Legal() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
   h: { fontSize: fontSize.lg, fontWeight: "800", color: colors.onSurface },
   p: { fontSize: fontSize.sm, color: colors.onSurface, lineHeight: 22 },
   note: { fontSize: fontSize.xs, color: colors.textSecondary, fontStyle: "italic", marginTop: spacing.sm },
