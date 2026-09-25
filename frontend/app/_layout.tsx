@@ -15,6 +15,7 @@ import { initializeRevenueCat, SubscriptionProvider } from "@/src/revenuecat";
 import { ToastProvider } from "@/src/ui";
 import { AddSheetProvider } from "@/src/add-sheet";
 import { initializeTheme, useTheme } from "@/src/theme";
+import { BuddyReactionProvider } from "@/src/buddy-reaction-context";
 
 // Keep native errors visible while investigating startup issues; browser
 // bundling alone cannot verify an Expo Go launch on a physical device.
@@ -71,10 +72,12 @@ export default function RootLayout() {
               <KeyboardProvider>
                 <AuthProvider>
                   <ToastProvider>
+                    <BuddyReactionProvider>
                     <AddSheetProvider>
                       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
                       <RouterGate />
                     </AddSheetProvider>
+                    </BuddyReactionProvider>
                   </ToastProvider>
                 </AuthProvider>
               </KeyboardProvider>

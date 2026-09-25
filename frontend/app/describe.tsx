@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
@@ -6,16 +6,19 @@ import { AiItem, api, Meal } from "@/src/api";
 import { Button, Card, ErrorState, Icon, ScreenHeader } from "@/src/ui";
 import { ConfirmItems } from "@/src/food-components";
 import { track } from "@/src/analytics";
+import { useAuth } from "@/src/auth-context";
 
 const EXAMPLES = ["Two eggs, three strips of bacon, toast with butter", "Chicken rice bowl with avocado", "Large latte with oat milk and a banana"];
 
 export default function DescribeScreen() {
   const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
+  const { isPremium } = useAuth();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ items: AiItem[]; meal: Meal } | null>(null);
   const [error, setError] = useState<{ msg: string; status: number } | null>(null);
+  useEffect(() => { if (isPremium) setError(previous => previous?.status === 402 ? null : previous); }, [isPremium]);
 
   async function parse() {
     if (text.trim().length < 3) return;
@@ -43,7 +46,7 @@ export default function DescribeScreen() {
             <Button title="Find my foods" icon="sparkles" onPress={parse} loading={busy} disabled={text.trim().length < 3} size="lg" testID="describe-submit" />
             {busy && <Text style={styles.status}>Buddy is reading your meal…</Text>}
             {error && (
-              error.status === 402
+              error.status === 402 && !isPremium
                 ? <Card><ErrorState title="Free limit reached" message={error.msg} onRetry={() => router.push("/paywall")} secondaryTitle="Search instead" onSecondary={() => router.replace("/search")} /></Card>
                 : <Card><ErrorState title="Buddy couldn't understand that" message={error.msg} onRetry={parse} secondaryTitle="Enter manually" onSecondary={() => router.replace("/search")} /></Card>
             )}

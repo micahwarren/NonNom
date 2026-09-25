@@ -11,18 +11,19 @@ export function BuddyFace({ state, u, cheek, midnight, testID }: { state: BuddyS
   const joyful = state === "excellent" || state === "celebrating";
   const happy = joyful || state === "doing_well";
   const thirsty = state === "needs_hydration";
+  const full = state === "full";
   const s = faceStyles(ink, cheek);
   return (
-    <View pointerEvents="none" testID={testID} accessibilityLabel={`Expression: ${sad ? "sad" : happy ? "happy" : thirsty ? "thirsty" : "neutral"}`} style={[s.canvas, { transform: [{ scale: u }] }]}>
+    <View pointerEvents="none" testID={testID} accessibilityLabel={`Expression: ${full ? "full and sleepy" : sad ? "sad" : happy ? "happy" : thirsty ? "thirsty" : "neutral"}`} style={[s.canvas, { transform: [{ scale: u }] }]}>
       <View style={s.eyes}>
         {[0, 1].map(i => <View key={i} style={s.eyeSlot}>
           {sad && <View style={[s.brow, { transform: [{ rotate: i === 0 ? "-22deg" : "22deg" }] }]} />}
-          {joyful ? <View style={s.happyEye} /> : <View style={[s.eye, sad && s.sleepyEye]}><View style={[s.glint, midnight && { backgroundColor: INK }]} /></View>}
+          {full ? <View style={s.closedEye} /> : joyful ? <View style={s.happyEye} /> : <View style={[s.eye, sad && s.sleepyEye]}><View style={[s.glint, midnight && { backgroundColor: INK }]} /></View>}
         </View>)}
       </View>
       <View style={s.cheeks}>{[0, 1].map(i => <View key={i} style={s.cheek} />)}</View>
       <View style={s.mouthSlot}>
-        {sad ? <View style={s.frown} /> : thirsty ? <View style={s.thirstyMouth} /> : state === "celebrating" ? <View style={s.openMouth}><View style={s.tongue} /></View> : <View style={[s.smile, !happy && s.smallSmile]} />}
+        {full ? <View style={s.fullMouth} /> : sad ? <View style={s.frown} /> : thirsty ? <View style={s.thirstyMouth} /> : state === "celebrating" ? <View style={s.openMouth}><View style={s.tongue} /></View> : <View style={[s.smile, !happy && s.smallSmile]} />}
       </View>
       {thirsty && <View style={s.droplet} />}
     </View>
@@ -35,6 +36,8 @@ const faceStyles = (ink: string, cheek: string) => StyleSheet.create({
   eyeSlot: { width: 9, height: 13, justifyContent: "center" },
   eye: { width: 9, height: 13, borderRadius: 5, backgroundColor: ink, alignItems: "center", paddingTop: 2 },
   sleepyEye: { height: 8, borderRadius: 4 },
+  closedEye: { width: 11, height: 5, borderBottomWidth: 2.3, borderBottomLeftRadius: 7, borderBottomRightRadius: 7, borderColor: ink },
+  fullMouth: { width: 11, height: 6, borderRadius: 5, borderWidth: 2, borderColor: ink },
   happyEye: { width: 11, height: 7, borderTopWidth: 2.4, borderLeftWidth: 2.4, borderRightWidth: 2.4, borderColor: ink, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   glint: { width: 3, height: 3, borderRadius: 2, backgroundColor: WHITE },
   brow: { position: "absolute", top: -4, width: 10, height: 2, backgroundColor: ink, borderRadius: 2 },

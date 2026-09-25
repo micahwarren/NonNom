@@ -21,7 +21,8 @@ export default function Scan() {
   const [usage, setUsage] = useState<{ used: number; limit: number | null } | null>(null);
   const [permDenied, setPermDenied] = useState(false);
 
-  useEffect(() => { api.usage().then(u => setUsage(u.meal_photo_scan)).catch(() => {}); }, [result]);
+  useEffect(() => { api.usage().then(u => setUsage(u.meal_photo_scan)).catch(() => {}); }, [result, isPremium]);
+  useEffect(() => { if (isPremium) setError(previous => previous?.status === 402 ? null : previous); }, [isPremium]);
 
   async function pickImage(source: "camera" | "library") {
     setError(null); setResult(null); setPermDenied(false);
@@ -81,11 +82,11 @@ export default function Scan() {
 
         {error && (
           <Card>
-            {error.status === 402 ? (
+            {error.status === 402 && !isPremium ? (
               <View style={{ alignItems: "center", gap: spacing.sm }}>
                 <PremiumBadge />
                 <Text style={styles.errTitle}>You've used today's free scans</Text>
-                <Text style={styles.hint}>Premium includes expanded AI scans. Barcode scanning and search are always free and unlimited.</Text>
+                <Text style={styles.hint}>Premium includes unlimited AI scans. Barcode scanning and search are always free and unlimited.</Text>
                 <View style={{ flexDirection: "row", gap: spacing.sm }}>
                   <Button title="Try Premium" onPress={() => router.push("/paywall")} size="sm" />
                   <Button title="Scan barcode" variant="secondary" size="sm" onPress={() => router.replace("/barcode")} />

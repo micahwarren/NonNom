@@ -1,0 +1,61 @@
+{
+  "summary": "Backend + mobile-web regression executed against public preview. FeedMe real GPT call returned valid non-zero per-serving macros and calorie-consistent suggestions; over-target remaining now shows negative/over correctly. Reaction decorator emitted unique buddy_reaction IDs across manual/batch/edit/duplicate/saved/water/exercise/weight flows, tiny 0.1/0.01 nutrition changes produced directional reactions, and full-state boundary behaved correctly (+99.9 not full, +100 full, delete reverses). Major unresolved issue: dedicated Premium QA account still remains plan=free after Test Store restore/purchase attempt; premium limits are still enforced and premium >100 saved-meals entitlement could not be validated end-to-end.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "/api/auth/me, /api/me/usage, /api/me/entitlement",
+        "issue": "Premium QA account (qa.nom.premium@example.com) remains `plan: free`; usage limits stay finite (`meal_recommendation.limit=2`, etc.) after Test Store restore/purchase attempt. Premium bypass for AI limits and >100 saved meals is not active in real e2e.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Premium purchase/restore (RevenueCat Test Store) -> backend entitlement mirror",
+        "issue": "Paywall showed not-premium state, restore returned none, purchase confirm was attempted, but backend account still `free` afterwards; premium-only unlimited usage behavior not achieved.",
+        "affected_testIDs": [
+          "restore-purchases",
+          "start-premium",
+          "confirm-purchase",
+          "already-premium"
+        ]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5_regression.py",
+    "/app/test_reports/pytest/pytest_iter5_regression.xml",
+    "/app/test_reports/artifacts_iter5/initial_load.jpeg",
+    "/app/test_reports/artifacts_iter5/ui_final_success.jpeg",
+    "/app/test_reports/artifacts_iter5/premium_attempt.jpeg"
+  ],
+  "action_items": [
+    "Fix Premium entitlement sync path so qa.nom.premium@example.com becomes backend `plan=premium` after Test Store purchase/restore and no stale Free limit state remains.",
+    "Re-run full premium verification after fix: `/me/usage` limits null for all 3 AI types, FeedMe/scan/describe bypass exhausted usage, saved meals can exceed 100 and GET returns 101+.",
+    "Add focused e2e logging around RevenueCat identity + `/me/entitlement` calls to confirm purchase/restore lifecycle actually updates backend plan.",
+    "Optional follow-up test: force malformed AI output fixture and verify one retry + failed attempt does not consume free quota."
+  ],
+  "critical_code_review_comments": [
+    "`frontend/src/api.ts` correctly gates paid-sensitive routes through `registerEntitlementSync` before request dispatch; implementation intent is correct but runtime premium mirror is still failing in tested account.",
+    "`backend/meal_suggestions.py` normalization and validation now robustly reject missing/all-zero/invalid nutrition and derive calories from 4/4/9 when absent.",
+    "`backend/routes_auth.py` entitlement endpoint trusts client-supplied `premium` flag; functional for mirror architecture but should be backed by stronger server-side verification for production-hardening."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5_regression.py",
+    "/app/test_reports/iteration_5.json"
+  ],
+  "success_rate": {
+    "backend": "78% strict (7 passed, 2 skipped entitlement-dependent)",
+    "frontend": "~70% for requested scope (FeedMe/reactions/layout passed; Premium entitlement e2e failed)"
+  },
+  "seed_data_creation": "Created missing dedicated QA account `qa.nom.reactions@example.com` and completed onboarding for qa.nom.free/premium/reactions accounts for testability.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Premium account currently returns `plan=free`; run premium checks only after entitlement-sync fix. Keep using public URL from frontend/.env. Existing legacy backend_test.py still has one outdated assertion (`Nailed it` vs `Nailed it!`) unrelated to this iteration.",
+  "rca_of_issue": "Repro: (1) Login qa.nom.premium@example.com in web preview, (2) Open /paywall, (3) Restore purchases (shows none), (4) Attempt Start Premium + Confirm, (5) Re-check via `/api/auth/me` and `/api/me/usage` -> still `plan=free` and finite limits. Expected: backend `plan=premium`, usage limits null, premium gating removed. Mitigation: instrument and validate SDK identity binding and `/me/entitlement` sync after purchase/restore before allowing premium-gated requests/UI state."
+}

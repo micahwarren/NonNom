@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useEffect } from "react";
 import { Platform } from "react-native";
 import Purchases, { LOG_LEVEL } from "react-native-purchases";
 import type { CustomerInfo, PurchasesPackage } from "react-native-purchases";
@@ -30,6 +30,14 @@ export function initializeRevenueCat() {
 
 function useSubscriptionContext() {
   const queryClient = useQueryClient();
+  const updateIdentity = useCallback(async (id: string, info: CustomerInfo) => {
+    await Promise.all([
+      queryClient.cancelQueries({ queryKey: ["revenuecat", "customer-info"] }),
+      queryClient.cancelQueries({ queryKey: ["revenuecat", "app-user-id"] }),
+    ]);
+    queryClient.setQueryData(["revenuecat", "customer-info"], info);
+    queryClient.setQueryData(["revenuecat", "app-user-id"], id);
+  }, [queryClient]);
 
   const customerInfoQuery = useQuery({
     queryKey: ["revenuecat", "customer-info"],
@@ -80,6 +88,7 @@ function useSubscriptionContext() {
   const identityReady = !!appUserId && !appUserId.startsWith("$RCAnonymousID:");
 
   return {
+    updateIdentity,
     customerInfo: customerInfoQuery.data,
     offerings: offeringsQuery.data,
     offeringsError: offeringsQuery.error as Error | null,

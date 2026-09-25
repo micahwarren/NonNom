@@ -104,6 +104,27 @@
 
 user_problem_statement: "Simplify Buddy and Log; one cup water; advice info popup; horizontal daily history; fix subscription layout and Edit Goal; new outfits, funny accessories and shaped Noms with responsive expressions; optional dark mode."
 frontend:
+  - task: "Meal macro estimates, Premium limits, every-log reactions, full state and headline layout"
+    implemented: true
+    working: true
+    needs_retesting: false
+    priority: "high"
+    status_history:
+      - agent: "testing"
+        working: true
+        comment: "Reports6/7: actual provider Testvalidpurchase activatespro, backendpremium, allusage limitsnull, 101savedmealretrieval, relogin/accountisolation, delayed401race, nutritionnormalization12/12; gateall3types6/6. Persistentrestore successmarker+Continue tested. No blockingbugs. Main renamedProfileRestore testID only to avoid selector collision; paywall identifier unchanged."
+      - agent: "testing"
+        working: false
+        comment: "iteration_5: macro responses, reactions, boundary and centered layout passed; Premium e2e not activated (QA account remained free); 7 backend pass,2 skipped."
+      - agent: "main"
+        working: "NA"
+        comment: "Follow-up: fixed stale401 clearing newly issued auth token (captured browser had 401 from unauth initial Home requests). Added explicit post-purchase/restore SDK snapshot sync waiting older inFlight writes; account ID guard and diagnostic entitlement logs. Retest MUST complete actual TestStore checkout, not stop at our Confirm sheet. QA account exists in nomnom_db; earlier troubleshooter checked wrong DB. Premium test screenshot from iteration5 was actually FeedMe loading, so prior checkout result lacks evidence."
+      - agent: "user"
+        working: false
+        comment: "What should I eat shows zero macros; Premium still hits limits; Nom should react to every slight log change, get fuller/sleepier at 100+ kcal over daily intake; smaller info icon and truly centered headline."
+      - agent: "main"
+        working: "NA"
+        comment: "Strict meal normalization + numeric/energy validation + single retry; missing fields never default zero. Remaining values show over instead of clamped zero. Bounded last-12 exclusions fixes repeat-suggestion 422. SDK identity + entitlement mirror awaited before gated requests/purchases/restores; confirmed server plan drives UI. Premium saved cap removed; free quotas unchanged. Decorator emits before/after reactions for every food/water/exercise/weight mutation, queued global visual feedback + home refresh. Full state priority at intake >=target+100 independent of exercise, cartoon-only body stretch/sleepy face. Info glyph15px with44px hitbox and symmetric spacer. Must use testing agent before declaring fixes verified."
   - task: "First meal CTA reuses global Add menu and Buddy headline punctuation"
     implemented: true
     working: true
@@ -173,9 +194,11 @@ backend:
         working: "NA"
         comment: "Catalog defaults support old users; shape/shoes validated by equip endpoint with existing free/premium checks. No auth credentials changed."
 test_plan:
-  current_focus: ["First meal CTA reuses global Add menu and Buddy headline punctuation", "Phone crash confirmation remains pending separately"]
+  current_focus: ["Meal macro estimates, Premium limits, every-log reactions, full state and headline layout"]
   test_all: false
 agent_communication:
+  - agent: "main"
+    message: "Current macros/Premium/reactions/headline request verified by reports5-7. No manual Premium grants. QApro account activated via actual TestStore providerconfirmation (simulated billing). Unit fixtures are isolated, no production mocks. Native forcequit from earlier request still unconfirmed on phone. Future agents: check configured DB_NAME nomnom_db, not guessed nomnom."
   - agent: "main"
     message: "Do not mark crash resolved from web tests. Candidate fix validated for code and browser regressions; user must retry actual phone. Native libs match Expo bundled versions. Test report 3 switch checked-state issue is automation-only (use existing dark-mode-row-subtitle); no unrelated UI changes for crash patch. No auth or user data modified."
   - agent: "main"

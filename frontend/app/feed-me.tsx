@@ -13,7 +13,7 @@ export default function FeedMe() {
   const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{ remaining: Targets; suggestions: Suggestion[] } | null>(null);
   const [error, setError] = useState<{ msg: string; status: number } | null>(null);
@@ -32,10 +32,11 @@ export default function FeedMe() {
 
   async function load(exclude: string[] = []) {
     setLoading(true); setError(null);
-    try { const r = await api.feedMe(exclude); track("feed_me_used"); setData(r); setSeen(s => [...s, ...r.suggestions.map(x => x.name)]); }
+    try { const r = await api.feedMe(exclude); track("feed_me_used"); setData(r); setSeen(s => [...s, ...r.suggestions.map(x => x.name)].slice(-12)); }
     catch (e: any) { setError({ msg: e.message, status: e.status ?? 0 }); } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (isPremium && error?.status === 402) void load(); }, [isPremium, error?.status]);
 
   async function logIt() {
     if (!logging) return;
@@ -53,12 +54,12 @@ export default function FeedMe() {
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xxxl }}>
         {r && (
           <Card style={styles.left} testID="feed-remaining">
-            <Text style={styles.leftLabel}>You have left today</Text>
+            <Text style={styles.leftLabel} testID="feed-balance-label">Daily target balance</Text>
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Big v={`${Math.max(0, r.calories)}`} l="kcal" />
-              <Big v={`${Math.max(0, r.protein_g)}g`} l="protein" c={colors.protein} />
-              <Big v={`${Math.max(0, r.carbs_g)}g`} l="carbs" c={colors.carbs} />
-              <Big v={`${Math.max(0, r.fat_g)}g`} l="fat" c={colors.fat} />
+              <Big v={`${Math.abs(r.calories)}`} l={`kcal ${r.calories < 0 ? "over" : "left"}`} testID="feed-balance-calories" />
+              <Big v={`${Math.abs(r.protein_g)}g`} l={`protein ${r.protein_g < 0 ? "over" : "left"}`} c={colors.protein} testID="feed-balance-protein" />
+              <Big v={`${Math.abs(r.carbs_g)}g`} l={`carbs ${r.carbs_g < 0 ? "over" : "left"}`} c={colors.carbs} testID="feed-balance-carbs" />
+              <Big v={`${Math.abs(r.fat_g)}g`} l={`fat ${r.fat_g < 0 ? "over" : "left"}`} c={colors.fat} testID="feed-balance-fat" />
             </View>
           </Card>
         )}
@@ -68,7 +69,7 @@ export default function FeedMe() {
             <Text style={styles.status}>Buddy is thinking about what fits…</Text>
           </View>
         ) : error ? (
-          <Card>{error.status === 402
+          <Card>{error.status === 402 && !isPremium
             ? <ErrorState title="Free limit reached" message={error.msg} retryTitle="Try Premium" onRetry={() => router.push("/paywall")} secondaryTitle="Search foods" onSecondary={() => router.replace("/search")} />
             : <ErrorState title="Buddy is stumped" message={error.msg} onRetry={() => load()} />}</Card>
         ) : (
@@ -90,7 +91,7 @@ export default function FeedMe() {
               </Card>
             ))}
             <Button title="Another suggestion" icon="refresh" variant="ghost" onPress={() => load(seen)} testID="feed-another" />
-            <View style={{ alignItems: "center", gap: 4 }}><SourceTag source="ai_estimate" /><Text style={styles.note}>Nutrition values are estimates. Nearby restaurant options aren't available yet.</Text></View>
+            <View style={{ alignItems: "center", gap: 4 }}><SourceTag source="ai_estimate" /><Text style={styles.note}>Nutrition values are per-serving estimates. Nearby restaurant options aren’t available yet.</Text></View>
           </>
         )}
       </ScrollView>
@@ -112,10 +113,10 @@ export default function FeedMe() {
   );
 }
 
-function Big({ v, l, c }: { v: string; l: string; c?: string }) {
+function Big({ v, l, c, testID }: { v: string; l: string; c?: string; testID: string }) {
   const { colors, styles } = useThemeStyles(createStyles);
   c ??= colors.onSurfaceInverse;
-  return <View><Text style={[styles.big, { color: c }]}>{v}</Text><Text style={styles.bigL}>{l}</Text></View>;
+  return <View testID={testID}><Text style={[styles.big, { color: c }]}>{v}</Text><Text style={styles.bigL}>{l}</Text></View>;
 }
 
 export function RecipeBody({ s }: { s: Suggestion | null }) {

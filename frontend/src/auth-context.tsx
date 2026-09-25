@@ -1,100 +1,147 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 import Purchases from "react-native-purchases";
-import { api, clearAuthToken, getAuthToken, PublicUser, saveAuthToken } from "./api";
-import { rcEnabled, useSubscription } from "./revenuecat";
+import type { CustomerInfo } from "react-native-purchases";
+import { api, ApiError, clearAuthToken, getAuthToken, PublicUser, registerEntitlementSync, saveAuthToken } from "./api";
+import { rcEnabled, REVENUECAT_ENTITLEMENT_IDENTIFIER, useSubscription } from "./revenuecat";
 import { track } from "./analytics";
 import { syncReminders } from "./reminders";
 
+type PurchaseSnapshot = { userId: string; info: CustomerInfo };
 type AuthCtx = {
-  user: PublicUser | null;
-  loading: boolean;
-  isPremium: boolean;
+  user: PublicUser | null; loading: boolean; isPremium: boolean;
   purchaseIdentityError: string | null;
+  syncPremium: (purchase?: PurchaseSnapshot) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, inviteCode?: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  refresh: () => Promise<void>;
+  signOut: () => Promise<void>; refresh: () => Promise<void>;
   setUser: (u: PublicUser | null) => void;
 };
-
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const [user, setUserState] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchaseIdentityError, setPurchaseIdentityError] = useState<string | null>(null);
-  const rcIdentityRef = useRef<string | null>(null);
+  const userRef = useRef<PublicUser | null>(null);
+  const binding = useRef<string | null>(null);
+  const inFlight = useRef<{ id: string; promise: Promise<void> } | null>(null);
   const remindersSyncedFor = useRef<string | null>(null);
+  const { customerInfo, updateIdentity } = useSubscription();
+
+  const setUser = useCallback((next: PublicUser | null) => {
+    userRef.current = next;
+    setUserState(next);
+  }, []);
+
+  const syncPremium = useCallback(async (purchase?: PurchaseSnapshot) => {
+    const account = userRef.current;
+    if (!account || !rcEnabled) return;
+    if (purchase && purchase.userId !== account.id) throw new ApiError(409, "Your account changed. Please restore purchases for the current account.");
+    if (inFlight.current?.id === account.id) {
+      if (!purchase) return inFlight.current.promise;
+      // A purchase result is newer than an already-running free snapshot.
+      // Finish that write, then explicitly mirror the returned SDK entitlement.
+      await inFlight.current.promise.catch(() => {});
+      if (userRef.current?.id !== account.id) throw new ApiError(409, "Your account changed. Please try again.");
+    }
+    const promise = (async () => {
+      try {
+        let info;
+        if (binding.current !== account.id || await Purchases.getAppUserID() !== account.id) {
+          const login = await Purchases.logIn(account.id);
+          info = login.customerInfo;
+        } else {
+          info = purchase?.info ?? await Purchases.getCustomerInfo();
+        }
+        if (userRef.current?.id !== account.id || await Purchases.getAppUserID() !== account.id) {
+          throw new Error("Your account changed. Please try again.");
+        }
+        binding.current = account.id;
+        const premium = !!info.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER];
+        // A resolved SDK snapshot, not cached UI flags, determines the mirror.
+        const synced = await api.syncEntitlement(premium);
+        if (userRef.current?.id !== account.id) return;
+        await updateIdentity(account.id, info);
+        setUser(synced);
+        setPurchaseIdentityError(null);
+        if (__DEV__) console.info("[RevenueCat] entitlement mirrored", { appUserId: account.id, premium, serverPlan: synced.plan });
+      } catch (error) {
+        if (__DEV__) console.warn("[RevenueCat] account sync failed", error instanceof Error ? error.message : String(error));
+        if (userRef.current?.id === account.id) setPurchaseIdentityError(String(error));
+        throw new ApiError(503, "Couldn't confirm your subscription right now. Please try again; your Premium access has not been changed.");
+      }
+    })();
+    inFlight.current = { id: account.id, promise };
+    try { await promise; }
+    finally { if (inFlight.current?.promise === promise) inFlight.current = null; }
+  }, [setUser, updateIdentity]);
+
+  useEffect(() => registerEntitlementSync(syncPremium), [syncPremium]);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (await getAuthToken()) {
+          const restored = await api.me();
+          if (active) setUser(restored);
+        }
+      } catch (error: any) { if (error?.status === 401) await clearAuthToken(); }
+      finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [setUser]);
+
+  useEffect(() => { if (user?.id) void syncPremium().catch(() => {}); }, [user?.id, syncPremium]);
+  // SDK listeners also fire after purchase/restore/expiry; compare only confirmed
+  // snapshots, and avoid writing unknown or anonymous state as "free".
+  const entitlement = customerInfo?.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER];
+  const entitlementKey = customerInfo ? `${!!entitlement}:${entitlement?.expirationDate ?? ""}` : "";
+  useEffect(() => {
+    if (userRef.current && binding.current === userRef.current.id && entitlementKey) void syncPremium().catch(() => {});
+  }, [entitlementKey, syncPremium]);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", state => { if (state === "active") void syncPremium().catch(() => {}); });
+    return () => sub.remove();
+  }, [syncPremium]);
   useEffect(() => {
     if (!user || remindersSyncedFor.current === user.id) return;
     remindersSyncedFor.current = user.id;
-    syncReminders(user.notifications as Record<string, boolean>).catch(() => {});
-  }, [user?.id]);
-  const { isSubscribed, customerInfo, refetchIdentity, appUserId } = useSubscription();
-
-  useEffect(() => {
-    (async () => {
-      const t = await getAuthToken();
-      if (t) {
-        try { setUser(await api.me()); } catch (e: any) { if (e?.status === 401) await clearAuthToken(); }
-      }
-      setLoading(false);
-    })();
-  }, []);
-
-  // Bind RevenueCat identity to the stable backend user id on every auth path.
-  useEffect(() => {
-    if (!rcEnabled) return;
-    (async () => {
-      try {
-        if (user?.id && rcIdentityRef.current !== user.id) {
-          const { customerInfo: info } = await Purchases.logIn(user.id);
-          rcIdentityRef.current = user.id;
-          setPurchaseIdentityError(null);
-          refetchIdentity();
-          console.log("[RevenueCat] identity bound:", await Purchases.getAppUserID(), "(original:", info.originalAppUserId, ")");
-        } else if (!user?.id && rcIdentityRef.current) {
-          await Purchases.logOut();
-          rcIdentityRef.current = null;
-          refetchIdentity();
-        }
-      } catch (e) {
-        setPurchaseIdentityError(String(e));
-      }
-    })();
-  }, [user?.id]);
-
-  // Mirror the SDK entitlement to the backend so server-side AI limits and cosmetics resolve for this user.
-  useEffect(() => {
-    // Only trust customerInfo once the SDK confirms it belongs to this user (avoids syncing the anonymous cache).
-    if (!user || !customerInfo || rcIdentityRef.current !== user.id || appUserId !== user.id) return;
-    const premium = isSubscribed;
-    if ((user.plan === "premium") !== premium) {
-      api.syncEntitlement(premium).then(setUser).catch(() => {});
-    }
-  }, [isSubscribed, customerInfo, user?.id, appUserId]);
+    syncReminders(user.notifications).catch(() => {});
+  }, [user]);
 
   async function signIn(email: string, password: string) {
-    const r = await api.login(email, password);
-    await saveAuthToken(r.access_token);
-    setUser(r.user);
+    const result = await api.login(email, password);
+    await saveAuthToken(result.access_token);
+    setUser(result.user);
   }
   async function signUp(email: string, password: string, name: string, inviteCode?: string) {
-    const r = await api.signup(email, password, name, inviteCode);
-    await saveAuthToken(r.access_token);
-    setUser(r.user);
+    const result = await api.signup(email, password, name, inviteCode);
+    await saveAuthToken(result.access_token);
+    setUser(result.user);
     track("signup_completed");
   }
   async function signOut() {
+    // Finish old-account sync before removing its token or changing SDK identity.
+    await inFlight.current?.promise.catch(() => {});
     await clearAuthToken();
-    setUser(null);
+    setUser(null); binding.current = null; remindersSyncedFor.current = null;
+    if (rcEnabled) {
+      try { const info = await Purchases.logOut(); await updateIdentity(await Purchases.getAppUserID(), info); }
+      catch (error) { setPurchaseIdentityError(String(error)); }
+    }
   }
   async function refresh() {
-    try { setUser(await api.me()); } catch {}
+    const id = userRef.current?.id;
+    try {
+      await inFlight.current?.promise.catch(() => {});
+      const next = await api.me();
+      if (id && id === userRef.current?.id) setUser(next);
+    } catch {}
   }
-
-  const isPremium = isSubscribed || user?.plan === "premium";
-  return <Ctx.Provider value={{ user, loading, isPremium, purchaseIdentityError, signIn, signUp, signOut, refresh, setUser }}>{children}</Ctx.Provider>;
+  // Do not advertise Premium until the backend that enforces limits agrees.
+  const isPremium = user?.plan === "premium";
+  return <Ctx.Provider value={{ user, loading, isPremium, purchaseIdentityError, syncPremium, signIn, signUp, signOut, refresh, setUser }}>{children}</Ctx.Provider>;
 }
 
 export function useAuthToken() {
@@ -102,9 +149,8 @@ export function useAuthToken() {
   useEffect(() => { getAuthToken().then(setToken); }, []);
   return token;
 }
-
 export function useAuth() {
-  const v = useContext(Ctx);
-  if (!v) throw new Error("useAuth outside provider");
-  return v;
+  const value = useContext(Ctx);
+  if (!value) throw new Error("useAuth outside provider");
+  return value;
 }

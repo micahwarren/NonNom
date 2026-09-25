@@ -113,7 +113,7 @@ def nutrition_score(cal_in: int, cal_burned: int, protein: float, water_ml: int,
 
 
 # --- Buddy state ---------------------------------------------------------------
-BUDDY_STATES = ("neutral", "doing_well", "excellent", "tired", "celebrating", "needs_hydration", "needs_protein")
+BUDDY_STATES = ("neutral", "doing_well", "excellent", "tired", "celebrating", "needs_hydration", "needs_protein", "full")
 
 
 def buddy_state(summary: dict, t: dict, hour: int) -> dict:
@@ -123,7 +123,11 @@ def buddy_state(summary: dict, t: dict, hour: int) -> dict:
     water_pct = summary["water_ml"] / max(t["water_ml"], 1)
     score = summary["nutrition_score"]
 
-    if entries == 0:
+    intake_over = summary["calories_in"] - t["calories"]
+    if entries > 0 and intake_over >= 100:
+        state, headline = "full", "Feeling full and sleepy..."
+        msg = f"Your food log is {int(intake_over)} kcal above today's intake target. Nom is taking a rest. This is a reaction to your log, not a change in your body or weight."
+    elif entries == 0:
         state, headline = "neutral", "Ready when you are..."
         msg = "Log your first meal and Buddy will start tracking your day."
     elif abs(cal_left) <= t["calories"] * 0.1 and protein_left <= 0:
@@ -163,6 +167,8 @@ def _left_sentence(cal_left: int, protein_left: float) -> str:
 def day_label(summary: dict, t: dict) -> str:
     if summary["entries"] == 0:
         return "No entries"
+    if summary["calories_in"] - t["calories"] >= 100:
+        return "Full & Sleepy"
     s = summary["nutrition_score"]
     if s >= 80:
         return "Nailed It"
@@ -177,15 +183,15 @@ def day_label(summary: dict, t: dict) -> str:
 async def build_day_summary(user: dict, day: date, tz: int) -> dict:
     start, end = day_bounds(day, tz)
     q = {"user_id": user["_id"], "logged_at": {"$gte": start, "$lt": end}}
-    foods = await db().food_logs.find(q, {"calories": 1, "protein_g": 1, "carbs_g": 1, "fat_g": 1, "meal": 1}).to_list(500)
-    waters = await db().water_logs.find(q, {"amount_ml": 1}).to_list(200)
-    exercises = await db().exercise_logs.find(q, {"calories_burned": 1}).to_list(100)
+    foods = await db().food_logs.find(q, {"_id": 0, "calories": 1, "protein_g": 1, "carbs_g": 1, "fat_g": 1, "meal": 1}).to_list(None)
+    waters = await db().water_logs.find(q, {"_id": 0, "amount_ml": 1}).to_list(None)
+    exercises = await db().exercise_logs.find(q, {"_id": 0, "calories_burned": 1}).to_list(None)
     t = user_targets(user)
 
-    cal_in = int(sum(f.get("calories", 0) for f in foods))
-    protein = round(sum(f.get("protein_g", 0) for f in foods), 1)
-    carbs = round(sum(f.get("carbs_g", 0) for f in foods), 1)
-    fat = round(sum(f.get("fat_g", 0) for f in foods), 1)
+    cal_in = round(sum(f.get("calories", 0) for f in foods), 3)
+    protein = round(sum(f.get("protein_g", 0) for f in foods), 3)
+    carbs = round(sum(f.get("carbs_g", 0) for f in foods), 3)
+    fat = round(sum(f.get("fat_g", 0) for f in foods), 3)
     cal_out = int(sum(e.get("calories_burned", 0) for e in exercises))
     water_ml = int(sum(w.get("amount_ml", 0) for w in waters))
     score = nutrition_score(cal_in, cal_out, protein, water_ml, len(foods), t)
@@ -323,14 +329,14 @@ async def check_achievements(user: dict, tz: int) -> list[dict]:
         ok = 0
         for i in range(7):
             s = await build_day_summary(user, local_today(tz) - timedelta(days=i), tz)
-            if s["entries"] and abs(s["calories_in"] - s["calories_burned"] - t["calories"]) <= t["calories"] * 0.1:
+            if s["entries"] and s["buddy"]["state"] != "full" and abs(s["calories_in"] - s["calories_burned"] - t["calories"]) <= t["calories"] * 0.1:
                 ok += 1
         if ok == 7:
             earned.add("perfect_week")
 
     new_ids = [a for a in earned if a not in have]
     # social feed events (deduped per day, privacy-aware)
-    if summary["entries"] and abs(summary["calories_in"] - summary["calories_burned"] - t["calories"]) <= t["calories"] * 0.1 and summary["protein_g"] >= t["protein_g"]:
+    if summary["entries"] and summary["buddy"]["state"] != "full" and abs(summary["calories_in"] - summary["calories_burned"] - t["calories"]) <= t["calories"] * 0.1 and summary["protein_g"] >= t["protein_g"]:
         await emit_post(user, "daily_goal", "Hit today's calorie and protein goals", tz)
     if summary["protein_g"] >= t["protein_g"]:
         await emit_post(user, "protein_goal", "Hit my protein goal today", tz)

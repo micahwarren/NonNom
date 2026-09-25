@@ -123,7 +123,7 @@ export default function Profile() {
               else router.push("/paywall");
             }} />
           </View>
-          <Row icon="refresh-outline" title="Restore purchases" testID="restore-purchases" onPress={() => router.push("/paywall")} />
+          <Row icon="refresh-outline" title="Restore purchases" testID="profile-restore-purchases" onPress={() => router.push("/paywall")} />
         </Card>
 
         <SectionTitle title="Appearance" />

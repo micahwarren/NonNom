@@ -1,0 +1,56 @@
+{
+  "summary": "Executed focused backend+frontend verification for premium checkout and post-purchase entitlements using qa.nom.premium@example.com. Completed ACTUAL RevenueCat Test Store flow including provider-side \"Test valid purchase\"; backend plan switched to premium and usage limits became null. Added new pure unit tests for meal_suggestions normalization and feed_me single-retry/error-record behavior, plus API regression tests for premium/free plan boundaries and saved-meal caps.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Paywall checkout result signaling",
+        "issue": "After provider confirmation, paywall did not always render a deterministic on-screen success marker (`already-premium`/toast state capture timed out), although backend entitlement mirror completed and plan became premium.",
+        "affected_testIDs": [
+          "start-premium",
+          "confirm-purchase",
+          "already-premium"
+        ]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration6_meal_suggestions_unit.py",
+    "/app/backend/tests/test_iteration6_premium_postpurchase.py",
+    "/app/test_reports/pytest/pytest_iter6_unit.xml",
+    "/app/test_reports/pytest/pytest_iter6_premium.xml",
+    "/app/test_reports/artifacts_iter6/test_store_checkout_visible.jpeg",
+    "/app/test_reports/artifacts_iter6/test_store_outcome_after_valid_purchase.jpeg",
+    "/app/test_reports/artifacts_iter6/account_switch_result.jpeg",
+    "/app/test_reports/artifacts_iter6/final_20260925_061035.jpeg"
+  ],
+  "action_items": [
+    "Optional hardening: add explicit UI success state after provider confirmation (beyond backend mirror log) so automation/users can deterministically see purchase completion.",
+    "Keep monitoring RevenueCat->/me/entitlement mirror with current diagnostic logs in production-like runs."
+  ],
+  "critical_code_review_comments": [
+    "`frontend/src/api.ts` stale-401 guard behaved correctly in race test: delayed unauthorized pre-login request did not clear newly saved token.",
+    "`frontend/src/auth-context.tsx` mirror sequencing showed expected behavior in logs: old free mirror then fresh premium mirror with `[RevenueCat] entitlement mirrored` payload including appUserId/premium/serverPlan.",
+    "`backend/meal_suggestions.py` normalization/validation now handles nested numeric strings, NaN/missing rejects, derived calories, and macro-energy consistency checks as covered by unit tests."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration6_meal_suggestions_unit.py",
+    "/app/backend/tests/test_iteration6_premium_postpurchase.py",
+    "/app/test_reports/iteration_6.json"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 in new iteration-6 suites)",
+    "frontend": "90% for requested premium scope (checkout+provider confirmation+entitlement/account-switch validated; UI success marker nondeterministic)"
+  },
+  "seed_data_creation": "Created and deleted one temporary free test account for free saved-meal cap isolation: test_i6_freecap_<timestamp>@example.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Premium QA account is now active premium via real Test Store valid purchase. Re-login/account switch checks passed (premium upsell hidden for premium, visible for free). Usage limits null for premium and finite for free.",
+  "rca_of_issue": "Previous failures were largely incomplete checkout runs stopping before provider confirmation. In this run, once Test Store 'Test valid purchase' was clicked, network sequence showed `/v1/receipts` followed by `/api/me/entitlement` mirror to `premium:true`, and `/api/auth/me` + `/api/me/usage` confirmed backend premium state."
+}

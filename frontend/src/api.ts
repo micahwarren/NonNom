@@ -1,7 +1,15 @@
 import { clearToken, getToken, saveToken } from "./auth-storage";
+import { publishBuddyReaction } from "./buddy-events";
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL as string;
 const TZ_OFFSET = String(new Date().getTimezoneOffset());
+
+let entitlementSync: (() => Promise<void>) | null = null;
+export function registerEntitlementSync(sync: () => Promise<void>) {
+  entitlementSync = sync;
+  return () => { if (entitlementSync === sync) entitlementSync = null; };
+}
+const needsEntitlement = (path: string) => ["/ai/feed-me", "/food/photo/analyze", "/food/describe", "/me/usage", "/buddy/cosmetics", "/buddy/equip", "/saved-meals"].includes(path.split("?")[0]);
 
 export type Targets = { calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number };
 export type Profile = {
@@ -28,7 +36,8 @@ export type FoodItemIn = {
   brand?: string | null; serving_label?: string; quantity?: number; meal?: Meal; source?: string; data_source?: string;
   barcode?: string | null; provider?: string | null; provider_id?: string | null; image_path?: string | null; logged_date?: string;
 };
-export type BuddyState = "neutral" | "doing_well" | "excellent" | "tired" | "celebrating" | "needs_hydration" | "needs_protein";
+export type BuddyState = "neutral" | "doing_well" | "excellent" | "tired" | "celebrating" | "needs_hydration" | "needs_protein" | "full";
+export type BuddyReaction = { id: string; date: string; kind: string; direction: "improved" | "worsened" | "noted"; change: number; message: string; summary: DaySummary };
 export type DaySummary = {
   date: string; calories_in: number; calories_burned: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number;
   entries: number; meals_logged: number; targets: Targets; nutrition_score: number; day_label: string;
@@ -62,6 +71,8 @@ export class ApiError extends Error {
 }
 
 async function request<T = any>(path: string, init: RequestInit = {}): Promise<T> {
+  // Never race a paid request against the background RevenueCat-to-server mirror.
+  if (needsEntitlement(path) && entitlementSync) await entitlementSync();
   const token = await getToken();
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -76,10 +87,12 @@ async function request<T = any>(path: string, init: RequestInit = {}): Promise<T
   const text = await r.text();
   const data = text ? (() => { try { return JSON.parse(text); } catch { return { detail: text }; } })() : {};
   if (!r.ok) {
-    if (r.status === 401) await clearToken();
+    // A request started before login must never clear a newly issued session.
+    if (r.status === 401 && token && await getToken() === token) await clearToken();
     const detail = typeof data.detail === "string" ? data.detail : Array.isArray(data.detail) ? data.detail[0]?.msg ?? "Invalid input" : `Request failed (${r.status})`;
     throw new ApiError(r.status, detail);
   }
+  if (data.buddy_reaction && token === await getToken()) publishBuddyReaction(data.buddy_reaction);
   return data as T;
 }
 
@@ -137,7 +150,7 @@ export const api = {
   react: (postId: string, type: ReactionType) => request<{ my_reaction: ReactionType | null }>(`/social/posts/${postId}/react`, { method: "POST", body: json({ type }) }),
   buddies: () => request<{ me: SocialUser; friends: SocialUser[] }>("/social/buddies"),
   devAdvanceDay: () => request<{ ok: boolean; today: string; streak_days: number; level: number }>("/dev/advance-day", { method: "POST" }),
-  feedMe: (exclude: string[] = []) => request<{ remaining: Targets; suggestions: Suggestion[] }>("/ai/feed-me", { method: "POST", body: json({ exclude }) }),
+  feedMe: (exclude: string[] = []) => request<{ remaining: Targets; suggestions: Suggestion[] }>("/ai/feed-me", { method: "POST", body: json({ exclude: exclude.slice(-12) }) }),
 
   cosmetics: () => request<{ items: Cosmetic[]; equipped: Equipped; categories: string[] }>("/buddy/cosmetics"),
   equip: (category: string, cosmetic_id: string) => request<{ equipped: Equipped }>("/buddy/equip", { method: "POST", body: json({ category, cosmetic_id }) }),

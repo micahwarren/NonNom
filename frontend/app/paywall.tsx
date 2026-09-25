@@ -10,8 +10,8 @@ import { Button, Card, Icon, ScreenHeader, Sheet, Skeleton, useToast } from "@/s
 import { track } from "@/src/analytics";
 
 const BENEFITS = [
-  "Expanded AI meal scans and Describe Meal", "Full Buddy customization", "Premium outfits, skins and accessories",
-  "Advanced progress insights", "Buddy's full weekly report", "AI meal suggestions", "Future premium features",
+  "Unlimited AI meal scans and Describe Meal", "Full Buddy customization", "Premium outfits, skins and accessories",
+  "Advanced progress insights", "Buddy's full weekly report", "Unlimited AI meal suggestions and saved meals", "Future premium features",
 ];
 const LEGAL = { terms: process.env.EXPO_PUBLIC_TERMS_URL, privacy: process.env.EXPO_PUBLIC_PRIVACY_URL };
 
@@ -19,12 +19,14 @@ export default function Paywall() {
   const { colors, styles } = useThemeStyles(createStyles);
   const router = useRouter();
   const toast = useToast();
-  const { user, purchaseIdentityError } = useAuth();
-  const { offerings, offeringsError, isSubscribed, identityReady, isLoading, purchase, restore, isPurchasing, isRestoring, refetchCustomerInfo } = useSubscription();
+  const { user, purchaseIdentityError, syncPremium, isPremium } = useAuth();
+  const { offerings, offeringsError, identityReady, isLoading, purchase, restore, isPurchasing, isRestoring } = useSubscription();
   const [selected, setSelected] = useState<"annual" | "monthly">("annual");
   const [confirm, setConfirm] = useState<PurchasesPackage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restoreResult, setRestoreResult] = useState<"none" | "found" | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [purchaseComplete, setPurchaseComplete] = useState(false);
 
   useEffect(() => { track("paywall_viewed"); }, []);
 
@@ -35,26 +37,34 @@ export default function Paywall() {
   const savings = annual && monthly && monthly.product.price > 0 ? Math.round((1 - annual.product.price / (monthly.product.price * 12)) * 100) : null;
 
   async function buy(pkg: PurchasesPackage) {
-    setConfirm(null); setError(null);
+    if (!user) { setError("Sign in before purchasing Premium."); return; }
+    setConfirm(null); setError(null); setSyncing(true);
     try {
-      await purchase(pkg);
+      await syncPremium();
+      const info = await purchase(pkg);
+      if (!info.entitlements.active.pro) throw new Error("Purchase completed without an active Premium entitlement. Please restore purchases or contact support.");
+      await syncPremium({ userId: user.id, info });
       track("subscription_started", { package: pkg.identifier });
+      setPurchaseComplete(true);
       toast.show("Welcome to NomNom Premium", { icon: "sparkles" });
-      router.back();
     } catch (e: any) {
       if (e?.userCancelled) return;
       if (String(e?.message).includes("identity_not_ready")) setError("We couldn't link this purchase to your account yet. Please sign out and back in, then try again.");
       else setError("We couldn't complete your purchase. " + (e?.message ?? "Please try again."));
-    }
+    } finally { setSyncing(false); }
   }
   async function doRestore() {
-    setError(null); setRestoreResult(null);
+    if (!user) { setError("Sign in before restoring Premium."); return; }
+    setError(null); setRestoreResult(null); setSyncing(true);
     try {
+      await syncPremium();
       const info = await restore();
+      await syncPremium({ userId: user.id, info });
       const active = info.entitlements.active["pro"] !== undefined;
       setRestoreResult(active ? "found" : "none");
-      if (active) { track("subscription_restored"); toast.show("Premium restored", { icon: "sparkles" }); }
+      if (active) { setPurchaseComplete(true); track("subscription_restored"); toast.show("Premium restored", { icon: "sparkles" }); }
     } catch (e: any) { setError("Restore failed. " + (e?.message ?? "Please try again.")); }
+    finally { setSyncing(false); }
   }
 
   return (
@@ -67,12 +77,13 @@ export default function Paywall() {
           <Text style={styles.sub}>Get more from your Buddy and your nutrition goals.</Text>
         </View>
 
-        {isSubscribed ? (
+        {isPremium ? (
           <Card style={{ alignItems: "center", gap: spacing.sm }} testID="already-premium">
             <Icon name="checkmark-circle" size={32} color={colors.success} />
-            <Text style={styles.planTitle}>You're on Premium</Text>
-            <Text style={styles.sub}>Manage or cancel any time from your store subscriptions.</Text>
-            <Button title="Manage Subscription" variant="secondary" onPress={() => Linking.openURL(getManageUrl())} />
+            <Text style={styles.planTitle} testID={purchaseComplete ? "purchase-success" : "premium-active-title"}>{purchaseComplete ? "Premium is active!" : "You’re on Premium"}</Text>
+            <Text style={styles.sub} testID="premium-unlimited-benefits">Unlimited AI scans, meal descriptions, suggestions, and saved meals. Your access is ready.</Text>
+            {purchaseComplete && <Button title="Continue" onPress={() => router.back()} testID="premium-success-continue" />}
+            {Platform.OS !== "web" && <Button title="Manage Subscription" variant="secondary" testID="manage-store-subscription" onPress={() => Linking.openURL(getManageUrl()).catch(() => toast.show("Couldn’t open your store subscriptions", { icon: "alert-circle" }))} />}
           </Card>
         ) : (
           <>
@@ -95,15 +106,15 @@ export default function Paywall() {
               )}
 
             {purchaseIdentityError && <View style={styles.banner}><Icon name="alert-circle" size={16} color={colors.error} /><Text style={styles.bannerText}>Purchases are temporarily unavailable: account link failed. Sign out and back in to retry.</Text></View>}
-            {rcSimulated && pkgs.length > 0 && <Text style={styles.simulated}>Preview mode: purchases here are simulated through RevenueCat's Test Store. Real billing happens in the App Store / Play Store build.</Text>}
+            {rcSimulated && pkgs.length > 0 && <Text style={styles.simulated}>Preview mode: purchases here are simulated through RevenueCat’s Test Store. Real billing happens in the App Store / Play Store build.</Text>}
             {error && <Text style={styles.err} testID="purchase-error">{error}</Text>}
 
-            <Button title="Start Premium" size="lg" onPress={() => chosen && setConfirm(chosen)} disabled={!chosen || !identityReady || isPurchasing} loading={isPurchasing} testID="start-premium" />
+            <Button title="Start Premium" size="lg" onPress={() => chosen && setConfirm(chosen)} disabled={!chosen || !identityReady || isPurchasing || syncing} loading={isPurchasing || syncing} testID="start-premium" />
             <Text style={styles.fine}>Auto-renews until cancelled. Cancel any time in your store account settings. Prices shown in your local currency by the store.</Text>
           </>
         )}
 
-        <Button title={isRestoring ? "Connecting to store…" : "Restore Purchases"} variant="ghost" onPress={doRestore} loading={isRestoring} testID="restore-purchases" />
+        <Button title={isRestoring || syncing ? "Connecting to store…" : "Restore Purchases"} variant="ghost" onPress={doRestore} loading={isRestoring || syncing} testID="restore-purchases" />
         {restoreResult === "none" && <Text style={styles.sub} testID="restore-none">No previous purchases found for this account.</Text>}
         {restoreResult === "found" && <Text style={[styles.sub, { color: colors.success }]} testID="restore-found">Premium restored.</Text>}
         <View style={styles.legal}>

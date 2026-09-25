@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -9,6 +9,7 @@ import { useAuth } from "@/src/auth-context";
 import { Button, Card, ErrorState, Icon, ProgressBar, Sheet, Skeleton, useToast } from "@/src/ui";
 import { fmtNum, fmtWater } from "@/src/units";
 import { track } from "@/src/analytics";
+import { reactionState, useBuddyReaction } from "@/src/buddy-reaction-context";
 
 export default function Home() {
   const { colors, styles } = useThemeStyles(createStyles);
@@ -16,6 +17,7 @@ export default function Home() {
   const router = useRouter();
   const toast = useToast();
   const { user, refresh } = useAuth();
+  const { latest, active } = useBuddyReaction();
   const [summary, setSummary] = useState<DaySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -24,6 +26,9 @@ export default function Home() {
   const [buddyInfo, setBuddyInfo] = useState(false);
   const [waterBusy, setWaterBusy] = useState(false);
   const units = user?.profile?.units ?? "imperial";
+  useEffect(() => {
+    if (latest) setSummary(previous => ({ ...previous, ...latest.summary }));
+  }, [latest]);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -37,7 +42,6 @@ export default function Home() {
   async function quickWater(ml: number) {
     if (!summary || waterBusy) return;
     setWaterBusy(true);
-    setSummary({ ...summary, water_ml: summary.water_ml + ml });
     try {
       const r = await api.logWater(ml);
       track("water_logged", { ml });
@@ -79,7 +83,7 @@ export default function Home() {
         ) : (
           <View style={styles.hero}>
             <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel="Customize Buddy" testID="buddy-hero">
-              <BuddyAvatar state={summary?.buddy.state ?? "neutral"} equipped={user?.buddy?.equipped} size={150} level={level} testID="home-buddy-avatar" />
+              <BuddyAvatar state={reactionState(active, summary?.buddy.state ?? "neutral")} reactionKey={active?.id} equipped={user?.buddy?.equipped} size={150} level={level} testID="home-buddy-avatar" />
             </Pressable>
             <View style={styles.levelPill} testID="level-pill">
               <Icon name="star" size={12} color={colors.premium} />
@@ -87,9 +91,10 @@ export default function Home() {
               <Text style={styles.levelSub}>{leveledToday ? "· leveled up today" : "· log today to level up"}</Text>
             </View>
             <View style={styles.headlineRow}>
+              <View style={styles.infoSpacer} />
               <Text style={styles.headline} testID="buddy-headline">{summary?.buddy.headline}</Text>
               <Pressable testID="buddy-info-button" onPress={() => setBuddyInfo(true)} accessibilityRole="button" accessibilityLabel="Why Buddy feels this way" style={styles.infoButton}>
-                <Icon name="information-circle-outline" size={20} color={colors.textSecondary} />
+                <Icon name="information-circle-outline" size={15} color={colors.textSecondary} />
               </Pressable>
             </View>
           </View>
@@ -172,7 +177,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   levelPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   levelText: { fontWeight: "800", fontSize: fontSize.sm, color: colors.onSurface },
   levelSub: { fontWeight: "600", fontSize: fontSize.xs, color: colors.textSecondary },
-  headlineRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", maxWidth: "100%" },
+  headlineRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", width: "100%" },
+  infoSpacer: { width: 44, height: 44 },
   infoButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headline: { flexShrink: 1, fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface, textAlign: "center", letterSpacing: -0.5 },
   message: { fontSize: fontSize.md, color: colors.textSecondary, lineHeight: 22, textAlign: "center", paddingHorizontal: spacing.md },

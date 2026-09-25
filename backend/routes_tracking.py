@@ -1,5 +1,6 @@
 """Water, weight, exercise, summaries, progress, weekly report, Feed Me, Buddy cosmetics, achievements, analytics."""
 from datetime import date, timedelta
+import json
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,7 +9,9 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from core import (db, current_user, bearer, tz_dep, oid, now_utc, local_today, local_now, day_bounds, to_local_day,
-                  ai_gate, ai_record, ai_json, get_object_sync, logger)
+                  ai_gate, ai_record, ai_json, get_object_sync, is_premium, logger)
+from meal_suggestions import clean_suggestions
+from buddy_reactions import react_to_log
 from nutrition import (build_day_summary, user_targets, effective_streak, freeze_status, check_achievements, ACHIEVEMENTS,
                        COSMETICS, COSMETIC_BY_ID, DEFAULT_EQUIPPED, cosmetic_available, equipped_for, SCORE_EXPLANATION)
 
@@ -41,6 +44,7 @@ class EventsIn(BaseModel):
 
 # --- water -------------------------------------------------------------------
 @router.post("/water", status_code=201)
+@react_to_log("water")
 async def log_water(body: WaterIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     now = now_utc()
     r = await db().water_logs.insert_one({"user_id": user["_id"], "amount_ml": body.amount_ml, "logged_at": now})
@@ -49,7 +53,8 @@ async def log_water(body: WaterIn, user=Depends(current_user), tz: int = Depends
 
 
 @router.delete("/water/{log_id}")
-async def undo_water(log_id: str, user=Depends(current_user)):
+@react_to_log("water")
+async def undo_water(log_id: str, user=Depends(current_user), tz: int = Depends(tz_dep)):
     r = await db().water_logs.delete_one({"_id": oid(log_id), "user_id": user["_id"]})
     if r.deleted_count == 0:
         raise HTTPException(404, "Not found")
@@ -65,6 +70,7 @@ async def water_today(user=Depends(current_user), tz: int = Depends(tz_dep)):
 
 # --- weight & exercise -------------------------------------------------------
 @router.post("/weight", status_code=201)
+@react_to_log("weight")
 async def log_weight(body: WeightIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     when = now_utc()
     if body.logged_date:
@@ -80,7 +86,8 @@ async def log_weight(body: WeightIn, user=Depends(current_user), tz: int = Depen
 
 
 @router.delete("/weight/{log_id}")
-async def delete_weight(log_id: str, user=Depends(current_user)):
+@react_to_log("weight")
+async def delete_weight(log_id: str, user=Depends(current_user), tz: int = Depends(tz_dep)):
     r = await db().weight_logs.delete_one({"_id": oid(log_id), "user_id": user["_id"]})
     if r.deleted_count == 0:
         raise HTTPException(404, "Not found")
@@ -88,7 +95,8 @@ async def delete_weight(log_id: str, user=Depends(current_user)):
 
 
 @router.post("/exercise", status_code=201)
-async def log_exercise(body: ExerciseIn, user=Depends(current_user)):
+@react_to_log("exercise")
+async def log_exercise(body: ExerciseIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     now = now_utc()
     doc = {"user_id": user["_id"], **body.model_dump(), "logged_at": now}
     r = await db().exercise_logs.insert_one(doc)
@@ -240,6 +248,8 @@ FEED_SYSTEM = (
     "\"ingredients\": [{\"item\": str (ingredient name ONLY, e.g. 'cooked chicken breast' — never repeat the amount here), \"amount\": str (exact measurement with units, e.g. '6 oz (170 g)', '1 cup (185 g)', '1 tbsp (15 ml)')}] (3-10 items), "
     "\"recipe\": [str, str, ...] (3-6 short steps that reference the measured amounts)}]}. "
     "Calories and macros must be consistent with the listed ingredient amounts (use USDA-typical values; 4 kcal/g protein & carbs, 9 kcal/g fat). "
+    "All four nutrition numbers are REQUIRED and are PER SERVING, never daily remaining values. Never return missing or all-zero meal macros. "
+    "Ingredient amounts describe the full recipe; divide totals by servings for per-serving nutrition. "
     "Respect dietary preferences and allergies strictly. No medical claims."
 )
 
@@ -260,7 +270,7 @@ async def feed_me(body: FeedMeIn, user=Depends(current_user), tz: int = Depends(
     await ai_gate(user, "meal_recommendation", tz)
     s = await build_day_summary(user, local_today(tz), tz)
     t = s["targets"]
-    left = {"calories": t["calories"] - s["calories_in"] + s["calories_burned"], "protein_g": round(t["protein_g"] - s["protein_g"]),
+    left = {"calories": round(t["calories"] - s["calories_in"] + s["calories_burned"], 1), "protein_g": round(t["protein_g"] - s["protein_g"]),
             "carbs_g": round(t["carbs_g"] - s["carbs_g"]), "fat_g": round(t["fat_g"] - s["fat_g"])}
     start, end = day_bounds(local_today(tz), tz)
     eaten = [f["name"] async for f in db().food_logs.find({"user_id": user["_id"], "logged_at": {"$gte": start, "$lt": end}}, {"name": 1}).limit(15)]
@@ -275,20 +285,17 @@ async def feed_me(body: FeedMeIn, user=Depends(current_user), tz: int = Depends(
     )
     try:
         parsed = await ai_json(FEED_SYSTEM, prompt, model="gpt-5.4-mini")
+        try:
+            sugg = clean_suggestions(parsed)
+        except (ValueError, TypeError, KeyError) as invalid:
+            logger.warning("Invalid meal nutrition; requesting one corrected response: %s", invalid)
+            correction = prompt + "\nYour previous response had invalid nutrition. Return corrected complete meals with all four per-serving nutrition numbers and measured ingredients. Previous response: " + json.dumps(parsed)[:10000]
+            parsed = await ai_json(FEED_SYSTEM, correction, model="gpt-5.4-mini")
+            sugg = clean_suggestions(parsed)
     except Exception as e:
         logger.exception("feed-me failed")
         await ai_record(user, "meal_recommendation", "error", {"error": str(e)[:200]})
-        raise HTTPException(502, "Buddy couldn't come up with ideas right now. Try again in a moment.")
-    sugg = []
-    for it in (parsed.get("suggestions") or [])[:3]:
-        if not isinstance(it, dict) or not it.get("name"):
-            continue
-        sugg.append({"name": str(it["name"])[:80], "description": str(it.get("description") or "")[:160], "reason": str(it.get("reason") or "")[:160],
-                     "calories": max(0, int(float(it.get("calories") or 0))), "protein_g": round(float(it.get("protein_g") or 0), 1),
-                     "carbs_g": round(float(it.get("carbs_g") or 0), 1), "fat_g": round(float(it.get("fat_g") or 0), 1),
-                     "servings": max(1, int(it.get("servings") or 1)),
-                     "ingredients": [_clean_ingredient(g) for g in (it.get("ingredients") or []) if isinstance(g, dict) and g.get("item")][:12],
-                     "recipe": [str(x)[:200] for x in (it.get("recipe") or [])][:8]})
+        raise HTTPException(502, "Buddy couldn't validate this meal's nutrition. Please try again. This attempt won't count toward your free limit.")
     await ai_record(user, "meal_recommendation", "ok", {"n": len(sugg)})
     return {"remaining": left, "suggestions": sugg, "data_source": "ai_estimate", "restaurants_available": False}
 
@@ -315,13 +322,13 @@ def _saved_out(d: dict) -> dict:
 
 @router.get("/saved-meals")
 async def saved_meals(user=Depends(current_user)):
-    docs = await db().saved_meals.find({"user_id": user["_id"]}).sort("created_at", -1).to_list(100)
+    docs = await db().saved_meals.find({"user_id": user["_id"]}).sort("created_at", -1).to_list(None)
     return {"items": [_saved_out(d) for d in docs]}
 
 
 @router.post("/saved-meals", status_code=201)
 async def save_meal(body: SavedMealIn, user=Depends(current_user)):
-    if await db().saved_meals.count_documents({"user_id": user["_id"]}) >= 100:
+    if not is_premium(user) and await db().saved_meals.count_documents({"user_id": user["_id"]}) >= 100:
         raise HTTPException(400, "You can save up to 100 meals. Remove one to add another.")
     doc = {**body.model_dump(), "user_id": user["_id"], "created_at": now_utc(), "times_logged": 0}
     doc["ingredients"] = [{"item": str(g.get("item", ""))[:80], "amount": str(g.get("amount", ""))[:60]} for g in body.ingredients][:12]
@@ -343,6 +350,7 @@ class LogSavedIn(BaseModel):
 
 
 @router.post("/saved-meals/{meal_id}/log", status_code=201)
+@react_to_log("food")
 async def log_saved(meal_id: str, body: LogSavedIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     d = await db().saved_meals.find_one({"_id": oid(meal_id), "user_id": user["_id"]})
     if not d:

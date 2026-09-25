@@ -160,7 +160,7 @@ async def ai_gate(user: dict, usage_type: str, tz: int):
         "user_id": user["_id"], "type": usage_type, "status": "ok", "created_at": {"$gte": start, "$lt": end},
     })
     if used >= limit:
-        raise HTTPException(402, f"You've used your {limit} free {usage_type.replace('_', ' ')}s for today. Upgrade to Premium for more.")
+        raise HTTPException(402, f"You've used your {limit} free {usage_type.replace('_', ' ')}s for today. Premium removes daily usage limits.")
 
 
 async def ai_record(user: dict, usage_type: str, status: str, meta: Optional[dict] = None):

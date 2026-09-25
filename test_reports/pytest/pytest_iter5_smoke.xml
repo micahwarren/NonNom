@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="10" time="2.613" timestamp="2026-09-25T05:48:42.043003+00:00" hostname="agent-env-3575695b-bd42-4df6-bcdd-8880237df920"><testcase classname="tests.backend_test" name="test_api_root_status_ok" time="0.113" /><testcase classname="tests.backend_test" name="test_cosmetics_endpoint_rejects_unauthorized" time="0.033" /><testcase classname="tests.backend_test" name="test_cosmetics_catalog_and_defaults_for_free_user" time="0.180" /><testcase classname="tests.backend_test" name="test_invalid_equip_category_pair_returns_404" time="0.178" /><testcase classname="tests.backend_test" name="test_free_cosmetic_equip_persists_to_profile" time="0.243" /><testcase classname="tests.backend_test" name="test_premium_cosmetic_locked_for_free_user" time="0.132" /><testcase classname="tests.backend_test" name="test_water_add_250_and_undo_restores_summary" time="0.433" /><testcase classname="tests.backend_test" name="test_buddy_state_neutral_when_no_entries" time="0.220" /><testcase classname="tests.backend_test" name="test_buddy_state_needs_protein_for_low_scoring_day" time="0.395" /><testcase classname="tests.backend_test" name="test_buddy_state_celebrating_when_targets_hit" time="0.251"><failure message="AssertionError: assert 'Nailed it!' == 'Nailed it'&#10;  &#10;  - Nailed it&#10;  + Nailed it!&#10;  ?          +">api_client = &lt;requests.sessions.Session object at 0xf81b384b9e90&gt;
+test_user = {'email': 'test_buddy_1790315324268@example.com', 'password': 'Pass1234!', 'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV...3OTAzMTUzMjQsImV4cCI6MTc5MjkwNzMyNH0.dXt7Dwfiv3jWE93fa9zceoSGG6hAYk-RAcJjQd73RcA', 'Content-Type': 'application/json'}}
+
+    def test_buddy_state_celebrating_when_targets_hit(api_client, test_user):
+        target_update = {
+            "targets": {
+                "calories": 1000,
+                "protein_g": 20,
+                "carbs_g": 120,
+                "fat_g": 35,
+                "water_ml": 500,
+            }
+        }
+        patch = api_client.patch(f"{API}/me", headers=test_user["headers"], json=target_update, timeout=30)
+        assert patch.status_code == 200, patch.text
+        assert patch.json()["targets"]["calories"] == 1000
+    
+        hit_day = {
+            "name": "TEST_target_hit_meal",
+            "calories": 1000,
+            "protein_g": 25,
+            "carbs_g": 120,
+            "fat_g": 35,
+            "meal": "lunch",
+            "source": "manual",
+            "data_source": "user",
+        }
+        add_food = api_client.post(f"{API}/food", headers=test_user["headers"], json=hit_day, timeout=30)
+        assert add_food.status_code == 201, add_food.text
+    
+        headers = {**test_user["headers"], "X-TZ-Offset": str(_force_local_hour_offset(16))}
+        summary = api_client.get(f"{API}/summary/today", headers=headers, timeout=30)
+        assert summary.status_code == 200
+        buddy = summary.json()["buddy"]
+        assert buddy["state"] == "celebrating"
+&gt;       assert buddy["headline"] == "Nailed it"
+E       AssertionError: assert 'Nailed it!' == 'Nailed it'
+E         
+E         - Nailed it
+E         + Nailed it!
+E         ?          +
+
+backend/tests/backend_test.py:238: AssertionError</failure></testcase></testsuite></testsuites>

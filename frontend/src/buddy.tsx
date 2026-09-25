@@ -1,6 +1,6 @@
 // Buddy — the NomNom character. Pure RN views + reanimated, cosmetics rendered from data so new items need no UI rewrite.
 import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, useTheme } from "./theme";
@@ -27,7 +27,7 @@ const BACKGROUNDS: Record<string, string[]> = {
 
 export const DEFAULT_EQUIPPED: Equipped = { skin: "skin_classic", hat: "hat_none", glasses: "glasses_none", accessory: "acc_none", outfit: "outfit_none", background: "bg_cream", shape: "shape_round", shoes: "shoes_none" };
 
-type Props = { state?: BuddyState; equipped?: Partial<Equipped>; size?: number; animate?: boolean; showBackground?: boolean; level?: number; testID?: string };
+type Props = { state?: BuddyState; equipped?: Partial<Equipped>; size?: number; animate?: boolean; showBackground?: boolean; level?: number; testID?: string; reactionKey?: string };
 
 /** Level evolution tiers — Buddy looks cooler as the level (one per logged day) climbs. */
 export function levelTier(level: number) {
@@ -42,7 +42,7 @@ export function levelTier(level: number) {
   };
 }
 
-export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate = true, showBackground = true, level = 1, testID }: Props) {
+export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate = true, showBackground = true, level = 1, testID, reactionKey }: Props) {
   const { scheme } = useTheme();
   const tier = levelTier(level);
   const eq = { ...DEFAULT_EQUIPPED, ...(equipped ?? {}) };
@@ -62,7 +62,7 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
       y.value = withRepeat(withSequence(withTiming(-6 * u, { duration: 450, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 450, easing: Easing.in(Easing.quad) })), -1, false);
       sc.value = withRepeat(withSequence(withTiming(1.04, { duration: 450 }), withTiming(1, { duration: 450 })), -1, false);
       rot.value = state === "celebrating" ? withRepeat(withSequence(withTiming(-4, { duration: 450 }), withTiming(4, { duration: 450 })), -1, true) : 0;
-    } else if (state === "tired") {
+    } else if (state === "tired" || state === "full") {
       y.value = withTiming(3 * u, { duration: 500 });
       sc.value = withRepeat(withSequence(withTiming(0.985, { duration: 1500 }), withTiming(1, { duration: 1500 })), -1, false);
       rot.value = withRepeat(withSequence(withTiming(-2, { duration: 1600 }), withTiming(2, { duration: 1600 })), -1, true);
@@ -72,8 +72,8 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
       rot.value = 0;
     }
     return () => { cancelAnimation(y); cancelAnimation(sc); cancelAnimation(rot); };
-  }, [state, animate, u, y, sc, rot]);
-  const bodyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }, { scale: sc.value }, { rotate: `${rot.value}deg` }] }));
+  }, [state, animate, u, y, sc, rot, reactionKey]);
+  const bodyStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }, { scale: sc.value }, { scaleX: state === "full" ? 1.16 : 1 }, { scaleY: state === "full" ? 1.04 : 1 }, { rotate: `${rot.value}deg` }] }));
 
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }} testID={testID} accessibilityRole="image" accessibilityLabel={`${eq.shape.replace("shape_", "")} Nom is ${state.replace(/_/g, " ")}`}>
@@ -93,6 +93,7 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
       {state === "celebrating" && [0, 1, 2].map(i => (
         <Animated.View key={i} style={{ position: "absolute", top: (6 + i * 8) * u, left: (12 + i * 34) * u }}><Icon name="sparkles" size={10 * u} color={colors.carbs} /></Animated.View>
       ))}
+      {state === "full" && <View testID={testID ? `${testID}-full-signs` : undefined} style={[styles.sleepMarks, { right: 4 * u, top: 4 * u }]}><Text style={[styles.sleepText, { fontSize: 14 * u }]}>z Z</Text></View>}
       <Animated.View style={[{ width: 64 * u, height: 60 * u, marginTop: 8 * u }, bodyStyle]}>
         <ExtraAccessory id={eq.accessory} u={u} behind />
         <ShapeDetails shape={eq.shape === "shape_cloud" ? eq.shape : ""} u={u} body={skin.body} />
@@ -102,6 +103,7 @@ export function BuddyAvatar({ state = "neutral", equipped, size = 120, animate =
           <ShapeDetails shape={eq.shape === "shape_dumpling" ? eq.shape : ""} u={u} body={skin.body} />
           {tier.sheen && <View style={{ position: "absolute", top: 6 * u, left: 12 * u, width: 16 * u, height: 8 * u, borderRadius: 8 * u, backgroundColor: WHITE, opacity: 0.45, transform: [{ rotate: "-20deg" }] }} />}
           {tier.legendary && <View style={[{ position: "absolute", width: 64 * u, height: 60 * u, borderWidth: 2.5 * u, borderColor: colors.premium }, shape]} />}
+          {state === "full" && <View testID={testID ? `${testID}-full-tummy` : undefined} style={[styles.fullTummy, { width: 35 * u, height: 14 * u, bottom: 2 * u, borderRadius: 15 * u }]}><View style={[styles.bellyButton, { width: 3 * u, height: 2 * u, top: 5 * u }]} /></View>}
           <BuddyFace state={state} u={u} cheek={skin.cheek} midnight={eq.skin === "skin_midnight"} testID={testID ? `${testID}-expression` : undefined} />
           <Glasses id={eq.glasses} u={u} />
           <Accessory id={eq.accessory} u={u} />
@@ -194,10 +196,14 @@ function Outfit({ id, u }: { id: string; u: number }) {
 }
 
 const styles = StyleSheet.create({
+  sleepMarks: { position: "absolute" },
+  sleepText: { color: INK, fontWeight: "800", opacity: 0.65 },
+  fullTummy: { position: "absolute", backgroundColor: WHITE, opacity: 0.25, alignItems: "center" },
+  bellyButton: { backgroundColor: INK, borderRadius: 2 },
   bodyShadow: { shadowColor: INK, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   prop: { position: "absolute", backgroundColor: WHITE, alignItems: "center", justifyContent: "center", shadowColor: INK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 2 },
 });
 
 export const BUDDY_STATE_LABEL: Record<BuddyState, string> = {
-  neutral: "Neutral", doing_well: "Doing well", excellent: "Excellent", tired: "Tired", celebrating: "Celebrating", needs_hydration: "Needs water", needs_protein: "Needs protein",
+  neutral: "Neutral", doing_well: "Doing well", excellent: "Excellent", tired: "Tired", celebrating: "Celebrating", needs_hydration: "Needs water", needs_protein: "Needs protein", full: "Full and sleepy",
 };

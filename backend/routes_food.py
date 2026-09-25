@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from core import (db, current_user, tz_dep, oid, now_utc, local_today, day_bounds, infer_meal, to_local_day,
                   ai_gate, ai_record, ai_json, put_object_sync, APP_NAME, USDA_API_KEY, MEALS, logger)
 from nutrition import touch_streak, check_achievements
+from buddy_reactions import react_to_log
 
 router = APIRouter()
 Meal = Literal["breakfast", "lunch", "dinner", "snacks"]
@@ -125,6 +126,7 @@ async def food_for_day(date_: Optional[str] = Query(default=None, alias="date"),
 
 
 @router.post("/food", status_code=201)
+@react_to_log("food")
 async def log_food(body: FoodIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     d = _doc_from(body, user, tz)
     r = await db().food_logs.insert_one(d)
@@ -134,6 +136,7 @@ async def log_food(body: FoodIn, user=Depends(current_user), tz: int = Depends(t
 
 
 @router.post("/food/batch", status_code=201)
+@react_to_log("food")
 async def log_food_batch(body: FoodBatchIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
     docs = [_doc_from(i, user, tz, body.meal, body.image_path) for i in body.items]
     r = await db().food_logs.insert_many(docs)
@@ -144,6 +147,7 @@ async def log_food_batch(body: FoodBatchIn, user=Depends(current_user), tz: int 
 
 
 @router.patch("/food/{log_id}")
+@react_to_log("food")
 async def edit_food(log_id: str, body: FoodPatch, user=Depends(current_user), tz: int = Depends(tz_dep)):
     _id = oid(log_id, "log id")
     existing = await db().food_logs.find_one({"_id": _id, "user_id": user["_id"]})
@@ -163,6 +167,7 @@ async def edit_food(log_id: str, body: FoodPatch, user=Depends(current_user), tz
 
 
 @router.post("/food/{log_id}/duplicate", status_code=201)
+@react_to_log("food")
 async def duplicate_food(log_id: str, meal: Optional[Meal] = None, user=Depends(current_user), tz: int = Depends(tz_dep)):
     existing = await db().food_logs.find_one({"_id": oid(log_id, "log id"), "user_id": user["_id"]})
     if not existing:
@@ -176,7 +181,8 @@ async def duplicate_food(log_id: str, meal: Optional[Meal] = None, user=Depends(
 
 
 @router.delete("/food/{log_id}")
-async def delete_food(log_id: str, user=Depends(current_user)):
+@react_to_log("food")
+async def delete_food(log_id: str, user=Depends(current_user), tz: int = Depends(tz_dep)):
     r = await db().food_logs.delete_one({"_id": oid(log_id, "log id"), "user_id": user["_id"]})
     if r.deleted_count == 0:
         raise HTTPException(404, "Entry not found")
