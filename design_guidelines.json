@@ -1,0 +1,165 @@
+{
+  "app_name": "NomNom",
+  "personality": "4 Tactile / Playful LIGHT",
+  "personality_one_liner": "A friendly, gamified companion that makes building healthy habits feel like taking care of a cute digital pet.",
+  "color": {
+    "surface": "#FFF9F5",
+    "onSurface": "#2B2D42",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#2B2D42",
+    "surfaceTertiary": "#FFE3D8",
+    "onSurfaceTertiary": "#2B2D42",
+    "surfaceInverse": "#2B2D42",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#FF7369",
+    "brandPrimary": "#FF7369",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#FFD166",
+    "onBrandSecondary": "#2B2D42",
+    "brandTertiary": "#FFAA99",
+    "onBrandTertiary": "#2B2D42",
+    "success": "#06D6A0",
+    "onSuccess": "#FFFFFF",
+    "warning": "#FFD166",
+    "onWarning": "#2B2D42",
+    "error": "#EF476F",
+    "onError": "#FFFFFF",
+    "info": "#4CC9F0",
+    "onInfo": "#FFFFFF",
+    "border": "#F5E1D5",
+    "borderStrong": "#E8C9B8",
+    "divider": "#F5E1D5",
+    "muted": "#8D99AE",
+    "onBrand": "#FFFFFF"
+  },
+  "typography": {
+    "displayFontFamily": "Fredoka",
+    "textFontFamily": "Nunito",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use oversized, chunky touch targets and generous padding. Controlled asymmetry gives a playful feel.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "2",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use for the bottom tab bar when scrolling",
+      "Use for the bottom sheet overlay on the AI Camera screen",
+      "Use for premium/paywall featured cards"
+    ],
+    "dont's": [
+      "Avoid on everyday list items or basic daily log cards"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "A single-screen dashboard focusing on the virtual pet's current mood and quick logging actions.",
+      "states": {
+        "loading": "A bouncing blob animation in the center.",
+        "empty": "N/A - Core app loop starts immediately with a neutral pet.",
+        "error": "Pet looking confused with a retry bubble."
+      },
+      "layout": "Top section: Sticky header with Streak chip (brandSecondary) and macro rings. Middle: Large, central virtual pet graphic that morphs based on health metrics. Bottom: Oversized sticky primary FAB for AI Camera, flanked by secondary FABs for manual entry and water. Background should use a subtle, warm gradient (surface to surfaceTertiary)."
+    },
+    {
+      "name": "AI Camera Scanner",
+      "purpose": "Frictionless food logging via photo capture.",
+      "states": {
+        "loading": "Shimmer effect over the camera viewfinder with a 'Scanning your meal...' bubble.",
+        "empty": "N/A",
+        "error": "Glass sheet at the bottom indicating 'Couldn't recognize food' with a manual entry fallback."
+      },
+      "layout": "Full-bleed camera view. When food is detected, a heavy frosted glass bottom-sheet slides up showing the macro breakdown, playful food illustrations, and a pill-shaped 'Feed NomNom' primary CTA."
+    },
+    {
+      "name": "Dashboard & History",
+      "purpose": "Detailed tracking of calories, macros, and the pet's mood timeline.",
+      "states": {
+        "loading": "Skeleton UI for metric cards.",
+        "empty": "Empty meal log with a 'Your plate is empty' playful illustration.",
+        "error": "Retry data load button."
+      },
+      "layout": "Scrollable dashboard. Use a 2-column grid for macro summaries (chunky cards, lg radius, shadow tier 2). Below it, a 'Mood History Timeline' showing past pet states connected by a vertical line, reinforcing the habit loop."
+    },
+    {
+      "name": "Social Feed",
+      "purpose": "A Pinterest-style masonry grid showing friends' pets and their recent healthy actions.",
+      "states": {
+        "loading": "Staggered skeleton cards.",
+        "empty": "'Invite friends to see their pets grow!' with a large, playful illustration.",
+        "error": "Standard error state."
+      },
+      "layout": "Masonry layout of cards. Each card contains a friend's pet avatar (real image or illustration), their latest achievement badge, and a 'cheer' button. Keep cards playfully misaligned or staggered to break rigid grids."
+    },
+    {
+      "name": "Profile & Paywall",
+      "purpose": "User settings and freemium up-sell.",
+      "states": {
+        "loading": "Standard spinner.",
+        "empty": "N/A",
+        "error": "Standard error state."
+      },
+      "layout": "Profile details on top. The Paywall is a featured, glassmorphism-heavy hero card dominating the lower half. Use brandSecondary (yellow) or subtle gradients for premium glowing effects, alongside an illustration of the pet holding a crown or trophy."
+    }
+  ],
+  "images": {
+    "pet_happy": {
+      "url": "https://images.pexels.com/photos/29320899/pexels-photo-29320899.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "A happy green toy monster character waving"
+    },
+    "pet_sad": {
+      "url": "https://images.unsplash.com/photo-1706696951095-da3dcaad9d64?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwyfHxjdXRlJTIwM2QlMjBzYWQlMjBjaGFyYWN0ZXJ8ZW58MHx8fHwxNzkwMzAwNDQ2fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "A sad, sluggish emoji-like 3D face"
+    },
+    "food_healthy": {
+      "url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwyfHxoZWFsdGh5JTIwZnJlc2glMjBmb29kJTIwYm93bHxlbnwwfHx8fDE3OTAzMDA0NDZ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "A vibrant, healthy salad bowl with fresh ingredients"
+    },
+    "premium_illustration": {
+      "url": "https://images.unsplash.com/photo-1639628735078-ed2f038a193e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwyfHxjdXRlJTIwM2QlMjBtb25zdGVyJTIwY2hhcmFjdGVyfGVufDB8fHx8MTc5MDMwMDQ0Nnww&ixlib=rb-4.1.0&q=85",
+      "alt": "A cute orange 3D character wearing a backpack"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Tactile / Playful LIGHT personality. Use oversized touch targets, chunky cards (radius lg), and playful typography (Fredoka for headings, Nunito for body).",
+    "Avoid standard clinical health app colors (blue/green). Rely on the provided warm palette (Coral, Sunny Yellow, Peach) to maintain a fun, game-like vibe.",
+    "Implement the Pet on the Home screen as a large, central element. It should visually react to data (e.g., if calories logged are healthy, show the 'pet_happy' image or a similar illustration/Lottie).",
+    "For the AI Camera bottom sheet, implement heavy frosted glass over the viewfinder to display food recognition results.",
+    "Ensure all buttons use the prescribed hit slops (>=44x44pt) and include subtle haptic feedback (bouncy, playful snaps) on interaction."
+  ]
+}

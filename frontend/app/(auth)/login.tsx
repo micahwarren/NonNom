@@ -1,0 +1,91 @@
+import React, { useState } from "react";
+import {
+  View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, ActivityIndicator,
+} from "react-native";
+import { Link } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "@/src/auth-context";
+import { colors, spacing, radius } from "@/src/theme";
+import { PetCharacter } from "@/src/pet-character";
+
+export default function Login() {
+  const insets = useSafeAreaInsets();
+  const { signIn } = useAuth();
+  const [email, setEmail] = useState("demo@nomnom.app");
+  const [password, setPassword] = useState("DemoPass123!");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    setErr(null); setBusy(true);
+    try { await signIn(email.trim(), password); }
+    catch (e: any) { setErr(e.message ?? "Login failed"); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, backgroundColor: colors.surface }}>
+      <ScrollView contentContainerStyle={[styles.wrap, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled">
+        <View style={styles.petWrap}>
+          <PetCharacter mood="happy" size={140} />
+        </View>
+        <Text style={styles.title}>Welcome back</Text>
+        <Text style={styles.subtitle}>Your buddy missed you</Text>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            testID="login-email-input"
+            value={email} onChangeText={setEmail}
+            style={styles.input} autoCapitalize="none" keyboardType="email-address"
+            placeholder="you@example.com" placeholderTextColor={colors.muted}
+          />
+        </View>
+        <View style={styles.field}>
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            testID="login-password-input"
+            value={password} onChangeText={setPassword}
+            style={styles.input} secureTextEntry
+            placeholder="••••••••" placeholderTextColor={colors.muted}
+          />
+        </View>
+
+        {err && <Text style={styles.err} testID="login-error">{err}</Text>}
+
+        <Pressable testID="login-submit-button" style={({ pressed }) => [styles.cta, pressed && styles.pressed]} onPress={submit} disabled={busy}>
+          {busy ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.ctaText}>Log in</Text>}
+        </Pressable>
+
+        <Link href="/(auth)/signup" asChild>
+          <Pressable testID="go-to-signup"><Text style={styles.link}>New here? Create an account</Text></Pressable>
+        </Link>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { paddingHorizontal: spacing.xl, gap: spacing.md },
+  petWrap: { alignItems: "center", marginBottom: spacing.md },
+  title: { fontSize: 32, fontWeight: "800", color: colors.onSurface, textAlign: "center" },
+  subtitle: { fontSize: 15, color: colors.muted, textAlign: "center", marginBottom: spacing.lg },
+  field: { gap: spacing.xs },
+  label: { fontSize: 13, color: colors.onSurfaceSecondary, fontWeight: "600" },
+  input: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.lg,
+    borderWidth: 1.5, borderColor: colors.border, fontSize: 16, color: colors.onSurface,
+  },
+  cta: {
+    backgroundColor: colors.brandPrimary, paddingVertical: spacing.lg,
+    borderRadius: radius.pill, alignItems: "center", marginTop: spacing.md,
+    shadowColor: colors.brandPrimary, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 4,
+  },
+  pressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
+  ctaText: { color: colors.onBrandPrimary, fontSize: 17, fontWeight: "800" },
+  link: { color: colors.brandPrimary, textAlign: "center", fontWeight: "700", marginTop: spacing.md },
+  err: { color: colors.error, textAlign: "center", fontWeight: "600" },
+});

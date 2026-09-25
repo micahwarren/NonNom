@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "NomNom",
+    "slug": "frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "nomnom",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.emergent.healthbuddy.cfwaxa",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan meals to log nutrition instantly",
+        "NSPhotoLibraryUsageDescription": "Pick a food photo to log nutrition"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#FFF9F5"
+      },
+      "package": "com.emergent.healthbuddy.cfwaxa",
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFF9F5"
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-status-bar",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan meals to log nutrition instantly"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick a food photo to log nutrition",
+          "cameraPermission": "Scan meals to log nutrition instantly"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "summary": "Tested NomNom backend (16 pytest cases against public /api) and mobile frontend (login, home, log, stats, profile, paywall, scan). Backend: 15/16 passed (93.75%). Frontend: all rendered screens work as expected with correct testIDs and interactions. One CRITICAL backend bug found: POST /api/exercise returns HTTP 500 due to ObjectId serialization leak (Motor's insert_one mutates the input dict with generated _id; the endpoint spreads that dict into the JSON response). Photo AI food recognition (GPT-5.4 vision) works and returns valid name/calories/macros/health_score within ~5s. JWT auth, freemium scan gating logic, and pet-mood algorithm all behave correctly.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/exercise",
+        "issue": "Returns HTTP 500 (ValueError: ObjectId is not iterable). Root cause: Motor's insert_one mutates `doc` in place to add `_id` (ObjectId). The endpoint then returns `{**{k:v for k,v in doc.items() if k != 'user_id'}}` which now includes the ObjectId `_id`, and FastAPI cannot JSON-serialize it. Fix: build the response dict from body fields explicitly (like /api/water does) OR add `k != '_id'` to the filter OR cast str(doc['_id']).",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/food/manual",
+        "issue": "Same ObjectId mutation pattern (`**{k:v for k,v in log.items() if k != 'user_id'}`) sneaks the raw `_id` ObjectId into FoodLogOut kwargs. Pydantic silently ignores the extra field today, so the API works, but it is fragile and identical to the exercise bug. Rename filter to also exclude `_id`."
+      },
+      {
+        "endpoint": "GET /api/files/{path}",
+        "issue": "Signature declares `token: Optional[str] = None` query param but still uses HTTPBearer dependency, so the query-token fallback is unreachable. Either remove the token query param or implement token-in-query auth for <Image src=...> usage."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Log Exercise modal",
+        "issue": "UI shows a generic error alert because POST /api/exercise returns 500. Blocked by backend bug above.",
+        "affected_testIDs": ["exercise-btn", "ex-activity", "ex-duration", "ex-burned", "ex-save"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "global",
+        "issues": ["Console warns: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Multiple occurrences from RN Web style adapter. Migrate shadow* to boxShadow in StyleSheet blocks to silence warnings on web/RN 0.76+."]
+      }
+    ],
+    "react_native_issues": [
+      {
+        "component": "StyleSheet (shadow props)",
+        "issue": "Deprecated shadow* style props emitted by React Native web. Replace shadowColor/shadowOffset/shadowOpacity/shadowRadius with `boxShadow` on web-compatible components. Reference: multiple screens using card styles."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix POST /api/exercise ObjectId serialization: return an explicit dict (e.g. `{'id': str(r.inserted_id), 'activity': body.activity, 'duration_min': body.duration_min, 'calories_burned': body.calories_burned, 'logged_at': now}`) — same pattern as /api/water. Verify with the failing pytest.",
+    "Apply the same fix to POST /api/food/manual (exclude '_id' from the dict spread) to prevent a latent bug if FoodLogOut ever tightens extra=forbid.",
+    "Replace deprecated `shadow*` StyleSheet props with `boxShadow` across cards/buttons to remove RN web deprecation warnings.",
+    "Clarify GET /api/files intent: either drop the unused `token` query param or implement query-token auth (needed if images will be loaded via <Image src>)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L482: `**{k: v for k, v in doc.items() if k != 'user_id'}` leaks `_id` after insert_one mutates the dict → 500. Same pattern L353 for food/manual is only masked by Pydantic ignoring extras.",
+    "server.py L565–578: /api/files uses Depends(current_user) so the `token` query param is dead code; won't work for <img src> style loading in a browser.",
+    "server.py is 587 lines — approaching the 700-line split threshold; consider splitting routers (auth, food, water, exercise, summary, billing, files) into modules as feature set grows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new pytest suite)"
+  ],
+  "success_rate": {"backend": "93.75%", "frontend": "100% (screens render, all flows navigable; exercise blocked by backend 500)"},
+  "seed_data_creation": "Used seeded demo user (demo@nomnom.app). Created a TEST_apple manual food log and a TEST_Salad log that was later deleted; created a TEST_walk exercise attempt (failed due to backend). Cleanup: downgraded plan back to free and reset goals to 2000/2500 after paywall test.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite lives at /app/backend/tests/backend_test.py. Run with EXPO_PUBLIC_BACKEND_URL exported. The single failing test is `test_exercise_log` and it fails specifically at the response serialization stage; once main agent fixes the exercise endpoint, rerun that test only. Photo-scan test uses /tmp/pizza.jpg generated via PIL; if the demo user has already hit 3 photo scans today the test self-skips.",
+  "rca_of_issue": "POST /api/exercise 500: Motor's `insert_one` mutates the passed dict in place, assigning the new ObjectId to `doc['_id']`. The endpoint then returns `{'id': str(r.inserted_id), **{k:v for k,v in doc.items() if k != 'user_id'}}` — this spread now includes `_id` (raw ObjectId). FastAPI's jsonable_encoder cannot serialize ObjectId → raises ValueError → 500. Repro: `curl -X POST /api/exercise -H 'Authorization: Bearer <token>' -d '{\"activity\":\"run\",\"duration_min\":20,\"calories_burned\":200}'`. Mitigation: build response from `body` fields explicitly (see /api/water for the correct pattern) OR filter `k not in ('user_id','_id')`."
+}
