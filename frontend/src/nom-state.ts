@@ -9,7 +9,7 @@ export type NomAccessory = "thermometer" | "blanket" | "ice_pack" | "pillow" | "
 
 export type NomState = {
   facialExpression: NomExpression; bodyState: NomBody; accessories: NomAccessory[]; animation: NomAnimation;
-  headline: string; message: string; priority: string; widgetState: string; moods: string[]; legacyState: BuddyState;
+  headline: string; message: string; priority: string; widgetState: string; moods: string[]; legacyState: BuddyState; voiceLines?: string[];
 };
 
 const LEGACY: Record<BuddyState, Partial<NomState>> = {

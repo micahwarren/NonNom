@@ -47,6 +47,32 @@ MOOD_MESSAGES = {
     "rested": "Well rested. Today's a good day for consistency.",
 }
 
+# Short first-person lines Nom says when the app opens. Keyed by mood id first, then by expression as a fallback.
+VOICE_LINES = {
+    "sick": ["Ugh… I don't feel so good either. Soup?", "We'll take it slow today, okay?", "Blanket day. Fluids and rest, friend."],
+    "headache": ["Shh… quiet voices today.", "A big glass of water might help us both.", "Let's keep today gentle."],
+    "low_energy": ["*yawn* Five more minutes…", "Low battery over here too. Snack?", "We can do slow today. Slow still counts."],
+    "sore": ["Ow. Ow. Okay, moving carefully.", "Protein and rest fix everything, right?", "Stretch with me? Gently."],
+    "stressed": ["Deep breath. In… and out. Better?", "One meal at a time. That's all we need.", "I've got your back today."],
+    "anxious": ["Hey. You're okay. I'm right here.", "Let's keep things simple and steady today.", "Small steps. Regular meals. We've got this."],
+    "sad": ["I'm here. No pressure today.", "Comfort food can still be good food.", "Rough day? Let's just get through it together."],
+    "unmotivated": ["Meh day? Same. Log one thing and we're winning.", "No pep talk. Just… one bite at a time.", "Even a tiny log keeps us moving."],
+    "bloated": ["Oof, we're a little puffy today.", "Lighter plates and water sound nice.", "I'll sit this one out on the couch."],
+    "full": ["So. Full. Can't. Move.", "Next meal can be a light one, yeah?", "Food coma incoming…"],
+    "hungry": ["Is it snack time yet? Asking for a friend.", "My tummy's rumbling too. Let's eat!", "Hungry is a signal. Let's answer it."],
+    "energetic": ["Let's GO! What are we fueling today?", "Feeling zippy! Race you to lunch.", "Big energy day. Big protein day?"],
+    "great": ["Best day ever? Let's make it count!", "You're glowing. I'm glowing. Everyone's glowing.", "Great mood, great food. Let's go!"],
+    "happy": ["Good mood detected! Let's keep it rolling.", "Smiles all around. What's for lunch?", "Happy you, happy me."],
+    "rested": ["Ahh, well rested. Today's going to be good.", "Good sleep unlocked. Let's eat well too.", "Fresh start energy!"],
+    # expression fallbacks (no check-in today)
+    "stuffed": ["Zzz… wake me when it's tomorrow.", "We went a little past target. Fresh start tomorrow."],
+    "thirsty": ["Water break? My mouth's a desert.", "Sip sip! We're behind on water."],
+    "joyful": ["Look at us go! Nailed it.", "This is what a good day looks like!"],
+    "tired": ["Let's finish strong, okay?", "A little more effort and we're there."],
+    "neutral": ["Hey! Ready when you are.", "What are we eating today?", "Good to see you. Let's log something."],
+}
+
+
 # Legacy 8-state field kept for older clients / analytics.
 _LEGACY = {"sick": "tired", "tired": "tired", "sad": "tired", "sore": "tired", "stressed": "neutral", "stuffed": "full", "full": "full",
            "hungry": "neutral", "thirsty": "needs_hydration", "energetic": "excellent", "joyful": "celebrating", "happy": "doing_well", "neutral": "neutral"}
@@ -146,10 +172,15 @@ def get_nom_state(*, moods: list[str], calories_consumed: float, calorie_goal: f
             accessories += [a for a in r["accessories"] if a not in accessories]
 
     widget_state = expression if expression not in ("stuffed",) else "full"
+    lines: list[str] = []
+    for m in [r["id"] for r in active]:
+        lines += VOICE_LINES.get(m, [])
+    if not lines:
+        lines = VOICE_LINES.get(expression) or VOICE_LINES["neutral"]
     return {
         "facialExpression": expression, "bodyState": body, "accessories": accessories, "animation": animation,
         "headline": headline, "message": message, "priority": priority, "widgetState": widget_state, "moods": moods,
-        "legacyState": _LEGACY.get(expression, "neutral"),
+        "legacyState": _LEGACY.get(expression, "neutral"), "voiceLines": lines,
     }
 
 

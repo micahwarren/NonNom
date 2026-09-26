@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Animated, { FadeInDown, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
@@ -35,6 +36,25 @@ export default function Home() {
   useEffect(() => {
     if (latest) setSummary(previous => ({ ...previous, ...latest.summary }));
   }, [latest]);
+
+  // Nom voice line: one short mood-aware greeting per app open (cold start + return from background).
+  const [voice, setVoice] = useState<string | null>(null);
+  const spokeFor = useRef<string | null>(null);
+  useEffect(() => {
+    const lines = summary?.nom?.voiceLines;
+    if (!lines?.length || spokeFor.current === summary?.date) return;
+    spokeFor.current = summary?.date ?? "x";
+    setVoice(lines[Math.floor(Math.random() * lines.length)]);
+  }, [summary?.nom?.voiceLines, summary?.date]);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", st => { if (st === "active") { spokeFor.current = null; load(); } });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!voice) return;
+    const t = setTimeout(() => setVoice(null), 4500);
+    return () => clearTimeout(t);
+  }, [voice]);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -88,6 +108,10 @@ export default function Home() {
           <ErrorState message={err} onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} title="Couldn't load your day" />
         ) : (
           <View style={styles.hero}>
+            {voice && <Animated.View entering={FadeInDown.duration(220)} exiting={FadeOut.duration(180)} style={styles.bubble} testID="nom-voice-bubble" accessibilityLiveRegion="polite">
+              <Text style={styles.bubbleText}>{voice}</Text>
+              <View style={styles.bubbleTail} />
+            </Animated.View>}
             <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel={`Customize ${nomName}`} testID="buddy-hero">
               <BuddyAvatar nom={nom} reactionKey={active?.id} equipped={user?.buddy?.equipped} size={buddySize} level={level} testID="home-buddy-avatar" />
             </Pressable>
@@ -182,6 +206,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   streak: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surfaceTertiary, paddingHorizontal: spacing.md, height: 40, borderRadius: radius.pill },
   streakText: { fontWeight: "800", fontSize: fontSize.md, color: colors.onSurface },
   hero: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm },
+  bubble: { maxWidth: 300, backgroundColor: colors.surfaceInverse, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.lg, marginBottom: -spacing.xs, alignItems: "center", zIndex: 2 },
+  bubbleText: { color: colors.onSurfaceInverse, fontWeight: "700", fontSize: fontSize.sm, textAlign: "center" },
+  bubbleTail: { position: "absolute", bottom: -6, width: 12, height: 12, backgroundColor: colors.surfaceInverse, transform: [{ rotate: "45deg" }], borderRadius: 2 },
   levelPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   levelText: { fontWeight: "800", fontSize: fontSize.sm, color: colors.onSurface },
   levelSub: { fontWeight: "600", fontSize: fontSize.xs, color: colors.textSecondary },
