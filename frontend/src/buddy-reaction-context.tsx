@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInDown, FadeOutUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { BuddyReaction, BuddyState } from "./api";
+import type { BuddyReaction } from "./api";
+import { nomFromLegacy, withReaction } from "./nom-state";
 import { useAuth } from "./auth-context";
 import { subscribeBuddyReactions } from "./buddy-events";
 import { BuddyAvatar } from "./buddy";
@@ -12,12 +13,6 @@ import { ThemeColors, useThemeStyles, spacing, radius, fontSize } from "./theme"
 const Context = createContext<{ latest: BuddyReaction | null; active: BuddyReaction | null }>({ latest: null, active: null });
 export const useBuddyReaction = () => useContext(Context);
 
-export function reactionState(event: BuddyReaction | null, resting: BuddyState): BuddyState {
-  if (!event || resting === "full") return resting;
-  if (event.direction === "improved") return "celebrating";
-  if (event.direction === "worsened") return "tired";
-  return "neutral";
-}
 
 export function BuddyReactionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -42,12 +37,12 @@ export function BuddyReactionProvider({ children }: { children: React.ReactNode 
   return <Context.Provider value={{ latest, active }}>
     {children}
     {active && user && <Animated.View key={active.id} entering={FadeInDown.duration(200)} exiting={FadeOutUp.duration(150)} testID="buddy-log-reaction" accessibilityLiveRegion="polite" style={[styles.notice, { top: insets.top + spacing.sm }]}>
-      <BuddyAvatar state={reactionState(active, active.summary.buddy.state)} equipped={user.buddy.equipped} size={58} testID="reaction-nom" />
+      <BuddyAvatar nom={withReaction(active.summary.nom ?? nomFromLegacy(active.summary.buddy.state), active)} equipped={user.buddy.equipped} size={58} testID="reaction-nom" />
       <View style={styles.copy}>
         <Text testID="buddy-reaction-message" style={styles.message}>{active.message}</Text>
         <Text testID="buddy-reaction-direction" style={styles.detail}>{active.direction === "improved" ? "Small steps count" : active.direction === "worsened" ? "A change in your log, not a judgment" : "Check-in recorded"}</Text>
       </View>
-      <Pressable testID="dismiss-buddy-reaction" onPress={() => setQueue(previous => previous.slice(1))} style={styles.close} accessibilityRole="button" accessibilityLabel="Dismiss Nom reaction"><Icon name="close" size={17} color={colors.textSecondary} /></Pressable>
+      <Pressable testID="dismiss-buddy-reaction" onPress={() => setQueue(previous => previous.slice(1))} style={styles.close} accessibilityRole="button" accessibilityLabel={`Dismiss ${user.nom_name ?? "Nom"} reaction`}><Icon name="close" size={17} color={colors.textSecondary} /></Pressable>
     </Animated.View>}
   </Context.Provider>;
 }

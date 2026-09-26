@@ -7,6 +7,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from push import notify_user_id
 from core import db, current_user, tz_dep, oid, now_utc, APP_PUBLIC_URL
 from nutrition import effective_streak, equipped_for, DEFAULT_EQUIPPED
 
@@ -102,12 +103,14 @@ async def send_request(body: RequestIn, user=Depends(current_user)):
             raise HTTPException(409, "You're already friends")
         if existing["requester"] != user["_id"]:  # they asked first → accept
             await db().friendships.update_one({"_id": existing["_id"]}, {"$set": {"status": "accepted", "accepted_at": now_utc()}})
+            await notify_user_id(target["_id"], "friend_activity", "New friend", f"@{user.get('username')} accepted your friend request", "/friends?tab=friends")
             return {"status": "friends", "request_id": str(existing["_id"])}
         raise HTTPException(409, "Request already sent")
     pending = await db().friendships.count_documents({"requester": user["_id"], "status": "pending"})
     if pending >= 50:
         raise HTTPException(429, "Too many pending requests")
     r = await db().friendships.insert_one({"users": [user["_id"], target["_id"]], "requester": user["_id"], "status": "pending", "created_at": now_utc()})
+    await notify_user_id(target["_id"], "friend_activity", "Friend request", f"@{user.get('username')} wants to be friends", "/friends?tab=friends")
     return {"status": "outgoing", "request_id": str(r.inserted_id)}
 
 
@@ -117,6 +120,7 @@ async def accept_request(request_id: str, user=Depends(current_user)):
     if not r or r["requester"] == user["_id"]:
         raise HTTPException(404, "Request not found")
     await db().friendships.update_one({"_id": r["_id"]}, {"$set": {"status": "accepted", "accepted_at": now_utc()}})
+    await notify_user_id(r["requester"], "friend_activity", "New friend", f"@{user.get('username')} accepted your friend request", "/friends?tab=friends")
     return {"status": "friends"}
 
 
@@ -238,6 +242,9 @@ async def react(post_id: str, body: ReactIn, user=Depends(current_user)):
         return {"my_reaction": None}
     await db().social_posts.update_one({"_id": p["_id"]}, {"$pull": {"reactions": {"user_id": user["_id"]}}})
     await db().social_posts.update_one({"_id": p["_id"]}, {"$push": {"reactions": {"user_id": user["_id"], "type": body.type, "at": now_utc()}}})
+    if p["user_id"] != user["_id"]:
+        label = {"high_five": "high-fived", "nice": "liked", "fire": "hyped"}.get(body.type, "reacted to")
+        await notify_user_id(p["user_id"], "friend_activity", "High five!", f"@{user.get('username')} {label} your post: {p.get('text', '')[:60]}", "/friends", f"{p['_id']}:{user['_id']}:{body.type}")
     return {"my_reaction": body.type}
 
 

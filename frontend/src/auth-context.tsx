@@ -6,6 +6,7 @@ import { api, ApiError, clearAuthToken, getAuthToken, PublicUser, registerEntitl
 import { rcEnabled, REVENUECAT_ENTITLEMENT_IDENTIFIER, useSubscription } from "./revenuecat";
 import { track } from "./analytics";
 import { syncReminders } from "./reminders";
+import { registerForPush } from "./push";
 
 type PurchaseSnapshot = { userId: string; info: CustomerInfo };
 type AuthCtx = {
@@ -107,7 +108,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || remindersSyncedFor.current === user.id) return;
     remindersSyncedFor.current = user.id;
-    syncReminders(user.notifications).catch(() => {});
+    // Remote push first (tokens rotate, so every app open re-registers); local reminders then skip what the server sends.
+    registerForPush(user.id).catch(() => false).then(() => syncReminders(user.notifications).catch(() => {}));
   }, [user]);
 
   async function signIn(email: string, password: string) {

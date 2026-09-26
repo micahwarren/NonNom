@@ -9,6 +9,8 @@ from routes_auth import router as auth_router, new_user_doc
 from routes_food import router as food_router
 from routes_tracking import router as tracking_router
 from routes_social import router as social_router
+from routes_mood import router as mood_router
+from push import router as push_router, start_scheduler, ensure_indexes as push_indexes
 
 
 @asynccontextmanager
@@ -27,12 +29,16 @@ async def lifespan(app: FastAPI):
     await db.social_posts.create_index([("user_id", 1), ("_id", -1)])
     await db.saved_meals.create_index("user_id")
     await db.referrals.create_index("invitee_id", unique=True)
+    await db.mood_checkins.create_index([("user_id", 1), ("date", -1)], unique=True)
     if not await db.users.find_one({"email": "demo@nomnom.app"}):
         doc = new_user_doc("demo@nomnom.app", "DemoPass123!", "Demo")
         doc["username"] = "demo"
         await db.users.insert_one(doc)
         logger.info("Seeded demo user")
+    await push_indexes()
+    scheduler = start_scheduler()
     yield
+    scheduler.cancel()
     close_db()
 
 
@@ -51,4 +57,6 @@ api.include_router(auth_router)
 api.include_router(food_router)
 api.include_router(tracking_router)
 api.include_router(social_router)
+api.include_router(mood_router)
+api.include_router(push_router)
 app.include_router(api)

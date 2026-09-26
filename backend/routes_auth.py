@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 from core import db, current_user, issue_token, password_hash, now_utc, tz_dep, ai_usage_today, local_today
-from nutrition import (DEFAULT_TARGETS, compute_targets, user_targets, equipped_for, effective_streak, freeze_status)
+from nutrition import (DEFAULT_TARGETS, compute_targets, user_targets, equipped_for, effective_streak, freeze_status, nom_name_of)
+from legal_docs import TERMS_VERSION, PRIVACY_VERSION, acceptance_status
 from macro_targets import recommend_macros
 
 router = APIRouter()
@@ -23,6 +24,7 @@ class SignupIn(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=60)
     invite_code: Optional[str] = Field(default=None, max_length=24)
+    accept_terms: bool = False
 
 
 class LoginIn(BaseModel):
@@ -55,6 +57,7 @@ class TargetsIn(BaseModel):
 class MeUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=60)
     username: Optional[str] = Field(default=None, min_length=3, max_length=20)
+    nom_name: Optional[str] = Field(default=None, min_length=1, max_length=20)
     profile: Optional[ProfileIn] = None
     targets: Optional[TargetsIn] = None
     auto_macros: Optional[bool] = None
@@ -84,14 +87,15 @@ def new_user_doc(email: str, password: str, name: str) -> dict:
         "daily_calorie_goal": DEFAULT_TARGETS["calories"], "daily_water_goal_ml": DEFAULT_TARGETS["water_ml"],
         "streak_days": 0, "longest_streak": 0, "last_logged_day": None,
         "buddy": {"equipped": {}}, "unlocked_cosmetics": [], "achievements": [],
-        "notifications": dict(DEFAULT_NOTIFICATIONS), "privacy": dict(DEFAULT_PRIVACY),
+        "notifications": dict(DEFAULT_NOTIFICATIONS), "privacy": dict(DEFAULT_PRIVACY), "nom_name": "Nom",
     }
 
 
 def public_user(doc: dict, tz: int = 0) -> dict:
     return {
         "id": str(doc["_id"]), "email": doc["email"], "name": doc.get("name", ""),
-        "username": doc.get("username", ""), "plan": doc.get("plan", "free"),
+        "username": doc.get("username", ""), "plan": doc.get("plan", "free"), "nom_name": nom_name_of(doc),
+        "legal": acceptance_status(doc),
         "onboarding_complete": bool(doc.get("onboarding_complete", False)),
         "profile": doc.get("profile") or {}, "targets": user_targets(doc),
         "streak_days": effective_streak(doc, tz), "longest_streak": int(doc.get("longest_streak", 0)),
@@ -110,9 +114,13 @@ def public_user(doc: dict, tz: int = 0) -> dict:
 @router.post("/auth/signup", status_code=201)
 async def signup(body: SignupIn, tz: int = Depends(tz_dep)):
     email = body.email.lower()
+    if not body.accept_terms:
+        raise HTTPException(400, "Please accept the Terms of Service and Privacy Policy to create an account.")
     if await db().users.find_one({"email": email}):
         raise HTTPException(409, "An account with this email already exists")
     doc = new_user_doc(email, body.password, body.name.strip())
+    doc["legal_acceptance"] = {"terms_version": TERMS_VERSION, "privacy_version": PRIVACY_VERSION, "accepted_at": now_utc()}
+    doc["legal_acceptance_history"] = [doc["legal_acceptance"]]
     r = await db().users.insert_one(doc)
     doc["_id"] = r.inserted_id
     if body.invite_code:
@@ -145,6 +153,11 @@ async def update_me(body: MeUpdate, user=Depends(current_user), tz: int = Depend
     weight_log = None
     if body.name:
         updates["name"] = body.name.strip()
+    if body.nom_name is not None:
+        nn = re.sub(r"\s+", " ", body.nom_name).strip()
+        if not re.fullmatch(r"[A-Za-z0-9 .'\-]{1,20}", nn):
+            raise HTTPException(400, "Nom's name can use letters, numbers, spaces, apostrophes and hyphens (up to 20 characters)")
+        updates["nom_name"] = nn
     if body.username:
         uname = body.username.lower()
         if not re.fullmatch(r"[a-z0-9_]{3,20}", uname):
@@ -254,8 +267,16 @@ async def sync_entitlement(body: EntitlementIn, user=Depends(current_user), tz: 
 
 @router.delete("/me")
 async def delete_account(user=Depends(current_user)):
+    """Permanent deletion. Everything keyed to the user is removed; referral rows are anonymized (they belong to the inviter's
+    reward history). Store subscription records live with Apple/Google/RevenueCat and are not ours to delete."""
     uid = user["_id"]
-    for coll in ("food_logs", "water_logs", "exercise_logs", "weight_logs", "ai_usage", "analytics_events"):
+    for coll in ("food_logs", "water_logs", "exercise_logs", "weight_logs", "ai_usage", "analytics_events",
+                 "mood_checkins", "saved_meals", "social_posts"):
         await db()[coll].delete_many({"user_id": uid})
+    await db().friendships.delete_many({"users": uid})
+    await db().blocks.delete_many({"$or": [{"blocker": uid}, {"blocked": uid}]})
+    await db().social_posts.update_many({"reactions.user_id": uid}, {"$pull": {"reactions": {"user_id": uid}}})
+    await db().referrals.delete_many({"invitee_id": uid})
+    await db().referrals.update_many({"referrer_id": uid}, {"$set": {"referrer_id": None, "anonymized": True}})
     await db().users.delete_one({"_id": uid})
     return {"deleted": True}

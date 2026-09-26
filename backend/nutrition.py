@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from core import db, day_bounds, local_today, local_now, now_utc
+from nom_state import get_nom_state
 
 # --- default targets -----------------------------------------------------------
 DEFAULT_TARGETS = {"calories": 2000, "protein_g": 150, "carbs_g": 225, "fat_g": 65, "water_ml": 2500}
@@ -116,52 +117,22 @@ def nutrition_score(cal_in: int, cal_burned: int, protein: float, water_ml: int,
 BUDDY_STATES = ("neutral", "doing_well", "excellent", "tired", "celebrating", "needs_hydration", "needs_protein", "full")
 
 
-def buddy_state(summary: dict, t: dict, hour: int) -> dict:
-    entries = summary["entries"]
-    cal_left = t["calories"] - summary["calories_in"] + summary["calories_burned"]
-    protein_left = t["protein_g"] - summary["protein_g"]
-    water_pct = summary["water_ml"] / max(t["water_ml"], 1)
-    score = summary["nutrition_score"]
-
-    intake_over = summary["calories_in"] - t["calories"]
-    if entries > 0 and intake_over >= 100:
-        state, headline = "full", "Feeling full and sleepy..."
-        msg = f"Your food log is {int(intake_over)} kcal above today's intake target. Nom is taking a rest. This is a reaction to your log, not a change in your body or weight."
-    elif entries == 0:
-        state, headline = "neutral", "Ready when you are..."
-        msg = "Log your first meal and Buddy will start tracking your day."
-    elif abs(cal_left) <= t["calories"] * 0.1 and protein_left <= 0:
-        state, headline = "celebrating", "Nailed it!"
-        msg = "You hit your calorie range and your protein target. Great day."
-    elif water_pct < 0.4 and hour >= 14:
-        state, headline = "needs_hydration", "Time for water!"
-        msg = f"You're at {int(water_pct * 100)}% of your water goal. A glass now would help."
-    elif protein_left > 40 and hour >= 15:
-        state, headline = "needs_protein", "A little low on protein..."
-        msg = f"You still need {int(protein_left)}g of protein. A high-protein snack would fit well."
-    elif score >= 80:
-        state, headline = "excellent", "Doing great!"
-        msg = _left_sentence(cal_left, protein_left)
-    elif score >= 60:
-        state, headline = "doing_well", "Solid day so far!"
-        msg = _left_sentence(cal_left, protein_left)
-    elif score >= 40:
-        state, headline = "neutral", "Almost there..."
-        msg = _left_sentence(cal_left, protein_left)
-    else:
-        state, headline = "tired", "Let's finish strong!"
-        msg = _left_sentence(cal_left, protein_left)
-    return {"state": state, "headline": headline, "message": msg}
+def nom_name_of(user: dict) -> str:
+    return (user.get("nom_name") or "Nom").strip() or "Nom"
 
 
-def _left_sentence(cal_left: int, protein_left: float) -> str:
-    cal_left = int(cal_left)
-    p = int(protein_left)
-    if cal_left < 0:
-        return f"You're {abs(cal_left)} kcal over your target today. Tomorrow is a fresh start."
-    if p <= 0:
-        return f"You've hit your protein goal and have {cal_left} calories left."
-    return f"You have {cal_left} calories left and still need {p}g of protein."
+def buddy_state(summary: dict, t: dict, hour: int, moods: Optional[list[str]] = None, nom_name: str = "Nom") -> dict:
+    """Thin wrapper over the centralized Nom State Engine; keeps the legacy `state` field for older clients."""
+    nom = get_nom_state(moods=moods or [], calories_consumed=summary["calories_in"], calorie_goal=t["calories"],
+                        protein_consumed=summary["protein_g"], protein_goal=t["protein_g"], carbs_consumed=summary["carbs_g"], carbs_goal=t["carbs_g"],
+                        fat_consumed=summary["fat_g"], fat_goal=t["fat_g"], water_consumed=summary["water_ml"], water_goal=t["water_ml"],
+                        entries=summary["entries"], hour=hour, calories_burned=summary["calories_burned"], nutrition_score=summary["nutrition_score"], nom_name=nom_name)
+    return {"state": nom["legacyState"], "headline": nom["headline"], "message": nom["message"], "nom": nom}
+
+
+async def moods_for_day(user: dict, day: date) -> list[str]:
+    doc = await db().mood_checkins.find_one({"user_id": user["_id"], "date": day.isoformat()}, {"states": 1})
+    return list(doc.get("states") or []) if doc else []
 
 
 def day_label(summary: dict, t: dict) -> str:
@@ -205,8 +176,11 @@ async def build_day_summary(user: dict, day: date, tz: int) -> dict:
         "nutrition_score": score,
     }
     summary["day_label"] = day_label(summary, t)
+    moods = await moods_for_day(user, day)
+    summary["moods"] = moods
     hour = local_now(tz).hour if day == local_today(tz) else 23
-    summary["buddy"] = buddy_state(summary, t, hour)
+    summary["buddy"] = buddy_state(summary, t, hour, moods, nom_name_of(user))
+    summary["nom"] = summary["buddy"]["nom"]
     return summary
 
 
@@ -357,6 +331,9 @@ async def check_achievements(user: dict, tz: int) -> list[dict]:
     if rewards:
         update["$addToSet"] = {"unlocked_cosmetics": {"$each": rewards}}
     await db().users.update_one({"_id": user["_id"]}, update)
+    from push import notify  # local import: push imports nutrition
+    for i in new_ids:
+        await notify(user, "achievements", "Achievement unlocked!", f"{catalog[i]['name']} — {catalog[i]['description']}", "/achievements", f"{user['_id']}:ach:{i}")
     return [{**catalog[i], "unlocked_at": now_utc().isoformat()} for i in new_ids]
 
 

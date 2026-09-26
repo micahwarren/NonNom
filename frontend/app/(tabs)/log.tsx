@@ -8,12 +8,16 @@ import { Card, EmptyState, ErrorState, Icon, IconButton, LoadingState, MEALS } f
 import { EditFoodSheet, FoodRow } from "@/src/food-components";
 import { dayName, todayISO } from "@/src/units";
 import { useAddSheet } from "@/src/add-sheet";
+import { MoodCheckinCard } from "@/src/mood-checkin";
+import { useAuth } from "@/src/auth-context";
 
 export default function LogScreen() {
   const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { open: openAddSheet } = useAddSheet();
+  const { user } = useAuth();
+  const nomName = user?.nom_name ?? "Nom";
   const params = useLocalSearchParams<{ date?: string }>();
   const date = params.date ?? todayISO();
   const isToday = date === todayISO();
@@ -51,10 +55,12 @@ export default function LogScreen() {
           <Stat label="Meals" value={`${day?.count ?? 0}`} unit={day?.count === 1 ? "item" : "items"} />
         </Card>
 
+        {isToday && <MoodCheckinCard />}
+
         {loading ? <LoadingState rows={3} /> : err ? <ErrorState message={err} onRetry={load} /> : (
           <>
             {day && day.count === 0 && (
-              <EmptyState icon="restaurant-outline" title="Nothing logged yet" message={isToday ? "Log your first meal and Buddy will start tracking your day." : "No entries were logged on this day."} ctaTitle={isToday ? "Log your first meal" : undefined} onCta={openAddSheet} ctaTestID="log-first-meal" compact />
+              <EmptyState icon="restaurant-outline" title="Nothing logged yet" message={isToday ? `Log your first meal and ${nomName} will start tracking your day.` : "No entries were logged on this day."} ctaTitle={isToday ? "Log your first meal" : undefined} onCta={openAddSheet} ctaTestID="log-first-meal" compact />
             )}
             {MEALS.map(m => {
               const items = day?.meals[m.value] ?? [];

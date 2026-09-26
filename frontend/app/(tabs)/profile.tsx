@@ -15,11 +15,11 @@ const LEGAL = { terms: process.env.EXPO_PUBLIC_TERMS_URL, privacy: process.env.E
 const NOTIF: { key: string; label: string; sub: string }[] = [
   { key: "breakfast", label: "Breakfast reminder", sub: "Morning nudge to log" }, { key: "lunch", label: "Lunch reminder", sub: "Midday nudge" },
   { key: "dinner", label: "Dinner reminder", sub: "Evening nudge" }, { key: "hydration", label: "Hydration", sub: "Gentle water reminders" },
-  { key: "streak", label: "Streak", sub: "Keep your streak alive" }, { key: "weekly_report", label: "Weekly Buddy report", sub: "Sunday summary" },
+  { key: "streak", label: "Streak", sub: "Keep your streak alive" }, { key: "weekly_report", label: "Weekly Nom report", sub: "Sunday summary" },
   { key: "achievements", label: "Achievements", sub: "When you unlock something" },
 ];
 const PRIV: { key: string; label: string }[] = [
-  { key: "show_streak", label: "Show streak to friends" }, { key: "show_achievements", label: "Show achievements" }, { key: "show_cosmetics", label: "Show Buddy cosmetics" },
+  { key: "show_streak", label: "Show streak to friends" }, { key: "show_achievements", label: "Show achievements" }, { key: "show_cosmetics", label: "Show Nom cosmetics" },
   { key: "show_hydration_achievements", label: "Show hydration achievements" }, { key: "show_nutrition_achievements", label: "Show nutrition goal achievements" },
 ];
 
@@ -30,7 +30,9 @@ export default function Profile() {
   const router = useRouter();
   const toast = useToast();
   const { user, signOut, refresh, isPremium, setUser } = useAuth();
-  const [sheet, setSheet] = useState<null | "personal" | "notifications" | "privacy" | "units" | "delete">(null);
+  const [sheet, setSheet] = useState<null | "personal" | "notifications" | "privacy" | "units" | "delete" | "nomname">(null);
+  const nomName = user?.nom_name ?? "Nom";
+  const [nomNameDraft, setNomNameDraft] = useState(user?.nom_name ?? "Nom");
   const [name, setName] = useState(user?.name ?? "");
   const [username, setUsername] = useState(user?.username ?? "");
   const [busy, setBusy] = useState(false);
@@ -42,6 +44,10 @@ export default function Profile() {
   async function savePersonal() {
     setBusy(true);
     try { setUser(await api.updateMe({ name: name.trim(), username: username.trim() || undefined })); toast.show("Saved"); setSheet(null); } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } finally { setBusy(false); }
+  }
+  async function saveNomName() {
+    setBusy(true);
+    try { setUser(await api.updateMe({ nom_name: nomNameDraft.trim() || "Nom" })); toast.show(`Say hi to ${nomNameDraft.trim() || "Nom"}!`, { icon: "happy" }); setSheet(null); } catch (e: any) { toast.show(e.message, { icon: "alert-circle" }); } finally { setBusy(false); }
   }
   const [permState, setPermState] = useState<PermissionResult | null>(null);
   async function toggle(kind: "notifications" | "privacy", key: string, v: boolean) {
@@ -113,11 +119,12 @@ export default function Profile() {
           <Target label="Water" v={fmtWater(t?.water_ml ?? 0, units)} c={colors.water} />
         </Card>
 
-        <SectionTitle title="Buddy" />
+        <SectionTitle title={nomName} />
         <Card style={{ padding: 0 }}>
-          <Row icon="color-palette-outline" title="Customize Buddy" onPress={() => router.push("/customize")} testID="row-customize" />
+          <Row icon="text-outline" title="Nom Name" subtitle={`Your Nom is called ${nomName}`} onPress={() => { setNomNameDraft(nomName); setSheet("nomname"); }} testID="row-nom-name" />
+          <Row icon="color-palette-outline" title={`Customize ${nomName}`} onPress={() => router.push("/customize")} testID="row-customize" />
           <Row icon="trophy-outline" title="Achievements" onPress={() => router.push("/achievements")} />
-          <Row icon="people-outline" title="Friends" subtitle="Feed, high fives and side-by-side Buddies" onPress={() => router.push("/friends")} testID="row-friends" />
+          <Row icon="people-outline" title="Friends" subtitle="Feed, high fives and side-by-side Noms" onPress={() => router.push("/friends")} testID="row-friends" />
           <Row icon="person-add-outline" title="Invite a Friend" onPress={() => router.push("/friends?tab=invite")} testID="row-invite" />
           <Row icon="bookmark-outline" title="Saved Meals" onPress={() => router.push("/saved")} testID="row-saved" />
           {process.env.EXPO_PUBLIC_DEV_TOOLS === "1" && (
@@ -143,10 +150,14 @@ export default function Profile() {
           <Row icon="shield-checkmark-outline" title="Privacy" onPress={() => setSheet("privacy")} testID="row-privacy" />
           <Row icon="swap-horizontal-outline" title="Units" subtitle={units === "metric" ? "Metric (kg, cm, L)" : "Imperial (lb, ft, oz)"} onPress={() => setSheet("units")} testID="row-units" />
           <Row icon="help-circle-outline" title="Support" onPress={() => Linking.openURL(LEGAL.support ? `mailto:${LEGAL.support}` : "mailto:support@nomnom.app")} />
-          <Row icon="document-text-outline" title="Terms" onPress={() => (LEGAL.terms ? Linking.openURL(LEGAL.terms) : router.push("/legal?doc=terms" as any))} />
-          <Row icon="lock-closed-outline" title="Privacy Policy" onPress={() => (LEGAL.privacy ? Linking.openURL(LEGAL.privacy) : router.push("/legal?doc=privacy" as any))} />
           <Row icon="log-out-outline" title="Log Out" onPress={signOut} testID="logout" />
           <Row icon="trash-outline" title="Delete account" danger onPress={() => setSheet("delete")} testID="row-delete" />
+        </Card>
+
+        <SectionTitle title="Legal" />
+        <Card style={{ padding: 0 }} testID="legal-card">
+          <Row icon="document-text-outline" title="Terms of Service" subtitle={user?.legal?.terms_version ? `Accepted v${user.legal.terms_version}` : undefined} onPress={() => (LEGAL.terms ? Linking.openURL(LEGAL.terms) : router.push("/legal?doc=terms" as any))} testID="row-terms" />
+          <Row icon="lock-closed-outline" title="Privacy Policy" subtitle={user?.legal?.privacy_version ? `Accepted v${user.legal.privacy_version}` : undefined} onPress={() => (LEGAL.privacy ? Linking.openURL(LEGAL.privacy) : router.push("/legal?doc=privacy" as any))} testID="row-privacy-policy" />
         </Card>
         <Text style={styles.version}>NomNom · {user?.email}</Text>
       </ScrollView>
@@ -155,6 +166,14 @@ export default function Profile() {
         <Field label="Name" value={name} onChangeText={setName} testID="personal-name" />
         <Field label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" hint="Letters, numbers, underscores. Shown to friends instead of your email." testID="personal-username" />
         <Button title="Save" onPress={savePersonal} loading={busy} style={{ marginTop: spacing.sm }} testID="personal-save" />
+      </Sheet>
+      <Sheet visible={sheet === "nomname"} onClose={() => setSheet(null)} title="Nom Name" testID="nom-name-sheet">
+        <Text style={styles.sub}>Give your Nom a name. It's saved to your account and shows everywhere Nom appears, including widgets. Letters, numbers, spaces, apostrophes and hyphens; up to 20 characters.</Text>
+        <Field label="Name" value={nomNameDraft} onChangeText={setNomNameDraft} maxLength={20} placeholder="Nom" testID="nom-name-input" />
+        <View style={{ flexDirection: "row", gap: spacing.sm }}>
+          <Button title="Reset to Nom" variant="secondary" onPress={() => setNomNameDraft("Nom")} testID="nom-name-reset" />
+          <Button title="Save" onPress={saveNomName} loading={busy} style={{ flex: 1 }} testID="nom-name-save" />
+        </View>
       </Sheet>
       <Sheet visible={sheet === "notifications"} onClose={() => setSheet(null)} title="Notifications">
         {!remindersSupported && <Text style={styles.sub}>Reminders are delivered on your phone — they aren't available in the web preview.</Text>}
@@ -165,11 +184,11 @@ export default function Profile() {
             <Button title="Open Settings" size="sm" variant="secondary" onPress={openNotificationSettings} />
           </View>
         )}
-        <Text style={styles.sub}>Choose what Buddy can remind you about. Delivery requires the store build with push enabled.</Text>
+        <Text style={styles.sub}>Choose what {nomName} can remind you about. Delivery requires the store build with push enabled.</Text>
         {NOTIF.map(n => <Row key={n.key} title={n.label} subtitle={n.sub} right={<Switch value={!!user?.notifications?.[n.key]} onValueChange={v => toggle("notifications", n.key, v)} trackColor={{ true: colors.brandPrimary }} />} />)}
       </Sheet>
       <Sheet visible={sheet === "privacy"} onClose={() => setSheet(null)} title="Privacy">
-        <Text style={styles.sub}>Your weight, calories and meal history are never shared. These control what friends will see when social features launch.</Text>
+        <Text style={styles.sub}>Your weight, calories, meal history and feeling check-ins are never shared. These control what friends can see.</Text>
         {PRIV.map(n => <Row key={n.key} title={n.label} right={<Switch value={!!user?.privacy?.[n.key]} onValueChange={v => toggle("privacy", n.key, v)} trackColor={{ true: colors.brandPrimary }} />} />)}
       </Sheet>
       <Sheet visible={sheet === "units"} onClose={() => setSheet(null)} title="Units">
@@ -177,7 +196,7 @@ export default function Profile() {
         <Row title="Metric" subtitle="kg, cm, L" onPress={() => { setUnits("metric"); setSheet(null); }} right={units === "metric" ? <Icon name="checkmark" color={colors.brandPrimary} /> : undefined} />
       </Sheet>
       <Sheet visible={sheet === "delete"} onClose={() => setSheet(null)} title="Delete account">
-        <Text style={styles.sub}>This permanently deletes your account, food logs, weight history and Buddy. Active store subscriptions must be cancelled separately in your store account.</Text>
+        <Text style={styles.sub}>This permanently deletes your account, profile, food/water/exercise/weight logs, meal photos, feeling check-ins, saved meals, friendships, posts and {nomName}. Invite records are anonymized. Subscription transaction records stay with Apple/Google/RevenueCat and any active store subscription must be cancelled separately in your store account.</Text>
         <Field label='Type "DELETE" to confirm' value={deleteText} onChangeText={setDeleteText} autoCapitalize="characters" testID="delete-confirm-input" />
         <Button title="Delete my account" variant="danger" onPress={deleteAccount} loading={busy} disabled={deleteText.trim().toUpperCase() !== "DELETE"} style={{ marginTop: spacing.sm }} testID="delete-confirm" />
       </Sheet>

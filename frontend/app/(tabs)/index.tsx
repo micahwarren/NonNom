@@ -9,7 +9,9 @@ import { useAuth } from "@/src/auth-context";
 import { Button, Card, ErrorState, Icon, ProgressBar, Sheet, Skeleton, useToast } from "@/src/ui";
 import { fmtNum, fmtWater } from "@/src/units";
 import { track } from "@/src/analytics";
-import { reactionState, useBuddyReaction } from "@/src/buddy-reaction-context";
+import { useBuddyReaction } from "@/src/buddy-reaction-context";
+import { withReaction, nomFromLegacy } from "@/src/nom-state";
+import { WidgetSync } from "@/src/widget-sync";
 
 export default function Home() {
   const { colors, styles } = useThemeStyles(createStyles);
@@ -28,6 +30,8 @@ export default function Home() {
   const [buddyInfo, setBuddyInfo] = useState(false);
   const [waterBusy, setWaterBusy] = useState(false);
   const units = user?.profile?.units ?? "imperial";
+  const nomName = user?.nom_name ?? "Nom";
+  const nom = withReaction(summary?.nom ?? nomFromLegacy(summary?.buddy.state ?? "neutral"), active);
   useEffect(() => {
     if (latest) setSummary(previous => ({ ...previous, ...latest.summary }));
   }, [latest]);
@@ -84,18 +88,19 @@ export default function Home() {
           <ErrorState message={err} onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} title="Couldn't load your day" />
         ) : (
           <View style={styles.hero}>
-            <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel="Customize Buddy" testID="buddy-hero">
-              <BuddyAvatar state={reactionState(active, summary?.buddy.state ?? "neutral")} reactionKey={active?.id} equipped={user?.buddy?.equipped} size={buddySize} level={level} testID="home-buddy-avatar" />
+            <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" accessibilityLabel={`Customize ${nomName}`} testID="buddy-hero">
+              <BuddyAvatar nom={nom} reactionKey={active?.id} equipped={user?.buddy?.equipped} size={buddySize} level={level} testID="home-buddy-avatar" />
             </Pressable>
             <View style={styles.levelPill} testID="level-pill">
               <Icon name="star" size={12} color={colors.premium} />
               <Text style={styles.levelText}>Level {level}</Text>
               <Text style={styles.levelSub}>{leveledToday ? "· leveled up today" : "· log today to level up"}</Text>
             </View>
+            {!!summary?.moods?.length && <View style={styles.moodRow} testID="home-mood-row"><Icon name="heart" size={12} color={colors.brandPrimary} /><Text style={styles.moodText}>Feeling {summary.moods.map(m => m.replace("low_energy", "tired").replace(/_/g, " ")).join(" · ")}</Text></View>}
             <View style={styles.headlineRow}>
               <View style={styles.infoSpacer} />
               <Text style={styles.headline} testID="buddy-headline">{summary?.buddy.headline}</Text>
-              <Pressable testID="buddy-info-button" onPress={() => setBuddyInfo(true)} accessibilityRole="button" accessibilityLabel="Why Buddy feels this way" style={styles.infoButton}>
+              <Pressable testID="buddy-info-button" onPress={() => setBuddyInfo(true)} accessibilityRole="button" accessibilityLabel={`Why ${nomName} feels this way`} style={styles.infoButton}>
                 <Icon name="information-circle-outline" size={15} color={colors.textSecondary} />
               </Pressable>
             </View>
@@ -148,13 +153,14 @@ export default function Home() {
           <Icon name="chevron-forward" size={18} color={colors.onSurfaceInverse} />
         </Pressable>
       </ScrollView>
+      {summary && user && <WidgetSync nom={nom} summary={summary} user={user} />}
 
       <Sheet visible={buddyInfo} onClose={() => setBuddyInfo(false)} title={summary?.buddy.headline} testID="buddy-info-sheet">
         <Text style={styles.message} testID="buddy-message">{summary?.buddy.message}</Text>
         <Button title="Got it" onPress={() => setBuddyInfo(false)} testID="buddy-info-close" style={{ marginTop: spacing.md }} />
       </Sheet>
       <Sheet visible={streakInfo} onClose={() => setStreakInfo(false)} title={`${streak}-day streak`}>
-        <Text style={styles.infoText}>Log at least one food a day to keep your streak going. Buddy also levels up once per logged day — the higher the level, the cooler Buddy looks.</Text>
+        <Text style={styles.infoText}>{`Log at least one food a day to keep your streak going. ${nomName} also levels up once per logged day — the higher the level, the cooler ${nomName} looks.`}</Text>
         <View style={styles.freezeRow} testID="streak-freeze-status">
           <Icon name="shield-checkmark" size={20} color={freeze?.available ? colors.water : colors.muted} />
           <View style={{ flex: 1 }}>
@@ -179,6 +185,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   levelPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
   levelText: { fontWeight: "800", fontSize: fontSize.sm, color: colors.onSurface },
   levelSub: { fontWeight: "600", fontSize: fontSize.xs, color: colors.textSecondary },
+  moodRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  moodText: { fontSize: fontSize.xs, fontWeight: "700", color: colors.textSecondary, textTransform: "capitalize" },
   headlineRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", width: "100%" },
   infoSpacer: { width: 44, height: 44 },
   infoButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },

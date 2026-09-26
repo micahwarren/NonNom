@@ -5,8 +5,9 @@ import { Icon } from "./ui";
 // Fixed illustration palette: character clothing keeps its color in light and dark mode.
 const P = { ink: "#2B2D42", white: "#FFFFFF", cheese: "#FFD166", hole: "#D99B32", coral: "#FF7369", blue: "#507DC4", denim: "#355E9C", mint: "#8FE3C6", purple: "#9A7EE8", orange: "#FF9F43", silver: "#D7DFED", syrup: "#AB6841" };
 
-function Art({ u, children }: { u: number; children: React.ReactNode }) {
-  return <View pointerEvents="none" style={[s.canvas, { transform: [{ scale: u }] }]}>{children}</View>;
+// `w` = current body width from the rig (64 for a normal body); art anchored with `right:` follows the wider/narrower body.
+function Art({ u, w = 64, ox = 0, children }: { u: number; w?: number; ox?: number; children: React.ReactNode }) {
+  return <View pointerEvents="none" style={[s.canvas, { width: w, left: ox * u, transform: [{ scale: u }] }]}>{children}</View>;
 }
 
 export function nomShape(shape: string, u: number): ViewStyle {
@@ -21,11 +22,11 @@ export function nomShape(shape: string, u: number): ViewStyle {
   return shapes[shape as keyof typeof shapes] ?? shapes.shape_round;
 }
 
-export function ShapeDetails({ shape, u, body }: { shape: string; u: number; body: string }) {
+export function ShapeDetails({ shape, u, w = 64, body }: { shape: string; u: number; w?: number; body: string }) {
   if (shape !== "shape_cloud" && shape !== "shape_dumpling") return null;
-  return <Art u={u}>{shape === "shape_cloud" ? <>
-    <View style={[s.cloudLeft, { backgroundColor: body }]} /><View style={[s.cloudTop, { backgroundColor: body }]} /><View style={[s.cloudRight, { backgroundColor: body }]} />
-  </> : <View style={s.pleats}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={[s.pleat, { transform: [{ rotate: `${(i - 2) * 12}deg` }] }]} />)}</View>}</Art>;
+  return <Art u={u} w={w}>{shape === "shape_cloud" ? <>
+    <View style={[s.cloudLeft, { backgroundColor: body }]} /><View style={[s.cloudTop, { backgroundColor: body, left: w / 2 - 17 }]} /><View style={[s.cloudRight, { backgroundColor: body }]} />
+  </> : <View style={[s.pleats, { left: w / 2 - 14 }]}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={[s.pleat, { transform: [{ rotate: `${(i - 2) * 12}deg` }] }]} />)}</View>}</Art>;
 }
 
 export function ExtraHat({ id, u }: { id: string; u: number }) {
@@ -50,27 +51,16 @@ export function ExtraHat({ id, u }: { id: string; u: number }) {
   return null;
 }
 
-export function ExtraOutfit({ id, u }: { id: string; u: number }) {
-  if (!new Set(["outfit_denim", "outfit_pajamas", "outfit_astronaut", "outfit_superhero", "outfit_pirate"]).has(id)) return null;
-  return <Art u={u}>
-    {id === "outfit_denim" && <><View style={[s.clothes, s.denim]} /><View style={[s.strap, s.strapLeft]} /><View style={[s.strap, s.strapRight]} /><View style={s.denimPocket} /><View style={s.buttonLeft} /><View style={s.buttonRight} /></>}
-    {id === "outfit_pajamas" && <><View style={[s.clothes, s.pajamas]} />{[0, 1, 2].map(i => <View key={i} style={[s.stripe, { top: 43 + i * 7 }]} />)}<View style={s.badge}><Icon name="moon" size={8} color={P.ink} /></View></>}
-    {id === "outfit_astronaut" && <><View style={[s.clothes, s.space]} /><View style={s.spaceBelt} /><View style={s.controlPanel}><View style={s.controlLight} /><View style={s.controlBlue} /></View></>}
-    {id === "outfit_superhero" && <><View style={[s.clothes, s.super]} /><View style={s.superBelt} /><View style={s.superBadge}><Icon name="flash" size={10} color={P.cheese} /></View></>}
-    {id === "outfit_pirate" && <><View style={[s.clothes, s.pirate]} /><View style={s.pirateSash} /><View style={s.badge}><Icon name="skull" size={10} color={P.white} /></View></>}
-  </Art>;
-}
-
-export function ExtraAccessory({ id, u, behind = false }: { id: string; u: number; behind?: boolean }) {
-  if (behind) return id === "acc_wings" ? <Art u={u}><View style={s.wingLeft} /><View style={s.wingRight} /></Art> : null;
-  if (id === "acc_moustache") return <Art u={u}><View style={s.stacheLeft} /><View style={s.stacheRight} /></Art>;
-  if (id === "acc_floatie") return <Art u={u}><View style={s.floatie} /><View style={s.duckHead}><View style={s.duckEye} /></View><View style={s.duckBeak} /></Art>;
+export function ExtraAccessory({ id, u, w = 64, behind = false }: { id: string; u: number; w?: number; behind?: boolean }) {
+  if (behind) return id === "acc_wings" ? <Art u={u} w={w}><View style={s.wingLeft} /><View style={s.wingRight} /></Art> : null;
+  if (id === "acc_moustache") return <Art u={u} ox={(w - 64) / 2}><View style={s.stacheLeft} /><View style={s.stacheRight} /></Art>;
+  if (id === "acc_floatie") return <Art u={u} w={w}><View style={[s.floatie, { width: w + 14 }]} /><View style={s.duckHead}><View style={s.duckEye} /></View><View style={s.duckBeak} /></Art>;
   return null;
 }
 
-export function NomShoes({ id, u }: { id: string; u: number }) {
+export function NomShoes({ id, u, w = 64 }: { id: string; u: number; w?: number }) {
   if (id === "shoes_none") return null;
-  return <Art u={u}>{[0, 1].map(i => <View key={i} style={[s.shoePosition, i === 0 ? s.leftFoot : s.rightFoot]}>
+  return <Art u={u} w={w}>{[0, 1].map(i => <View key={i} style={[s.shoePosition, i === 0 ? s.leftFoot : s.rightFoot]}>
     {id === "shoes_rocket" && <View style={s.rocketFlame} />}
     <View style={[s.shoe, id === "shoes_duck" ? s.duckShoe : id === "shoes_rocket" ? s.rocketShoe : id === "shoes_skates" ? s.skateShoe : s.sneaker]}>
       {id === "shoes_duck" ? <><View style={s.slipperEye} /><View style={s.slipperBeak} /></> : <><View style={s.laceOne} /><View style={s.laceTwo} /><View style={s.sole} /></>}
@@ -105,16 +95,6 @@ const s = StyleSheet.create({
   ufoDome: { position: "absolute", left: 19, top: -23, width: 26, height: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16, backgroundColor: P.mint, borderWidth: 2, borderColor: P.white },
   ufoRim: { position: "absolute", top: -8, left: 1, width: 62, height: 12, borderRadius: 12, backgroundColor: P.silver },
   ufoLights: { position: "absolute", top: -3, left: 12, flexDirection: "row", gap: 7 }, ufoLight: { width: 5, height: 3, borderRadius: 2, backgroundColor: P.purple },
-  clothes: { position: "absolute", top: 39, left: 0, width: 64, height: 21 },
-  denim: { backgroundColor: P.blue }, strap: { position: "absolute", top: 35, width: 6, height: 20, backgroundColor: P.denim }, strapLeft: { left: 9 }, strapRight: { right: 9 },
-  denimPocket: { position: "absolute", top: 48, left: 23, width: 18, height: 9, borderWidth: 1, borderColor: P.denim, borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
-  buttonLeft: { position: "absolute", top: 44, left: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: P.cheese }, buttonRight: { position: "absolute", top: 44, right: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: P.cheese },
-  pajamas: { backgroundColor: P.purple }, stripe: { position: "absolute", left: 0, width: 64, height: 3, backgroundColor: P.white, opacity: 0.65 },
-  badge: { position: "absolute", left: 38, top: 47 }, space: { backgroundColor: P.white }, spaceBelt: { position: "absolute", top: 55, width: 64, height: 4, backgroundColor: P.silver },
-  controlPanel: { position: "absolute", left: 23, top: 48, width: 18, height: 9, borderRadius: 3, backgroundColor: P.ink, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 3 },
-  controlLight: { width: 4, height: 4, borderRadius: 2, backgroundColor: P.coral }, controlBlue: { width: 4, height: 4, borderRadius: 2, backgroundColor: P.mint },
-  super: { backgroundColor: P.blue }, superBelt: { position: "absolute", top: 56, width: 64, height: 4, backgroundColor: P.cheese }, superBadge: { position: "absolute", left: 26, top: 47, backgroundColor: P.coral, borderRadius: 3 },
-  pirate: { backgroundColor: P.ink }, pirateSash: { position: "absolute", left: 6, top: 45, width: 53, height: 6, backgroundColor: P.coral, transform: [{ rotate: "-28deg" }] },
   stacheLeft: { position: "absolute", left: 20, top: 35, width: 13, height: 5, borderRadius: 5, borderTopLeftRadius: 0, backgroundColor: P.ink, transform: [{ rotate: "-10deg" }] },
   stacheRight: { position: "absolute", left: 31, top: 35, width: 13, height: 5, borderRadius: 5, borderTopRightRadius: 0, backgroundColor: P.ink, transform: [{ rotate: "10deg" }] },
   floatie: { position: "absolute", top: 48, left: -7, width: 78, height: 15, borderRadius: 12, backgroundColor: P.cheese, borderBottomWidth: 4, borderColor: P.orange },

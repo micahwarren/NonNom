@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useRouter } from "expo-router";
 import { useThemeStyles, ThemeColors, fontSize, radius, spacing } from "@/src/theme";
-import { api, BuddyState, Cosmetic, Equipped } from "@/src/api";
+import { api, Cosmetic, Equipped } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BuddyAvatar, DEFAULT_EQUIPPED } from "@/src/buddy";
+import { nomFromLegacy, NomState } from "@/src/nom-state";
 import { Button, ErrorState, Icon, LoadingState, PremiumBadge, ScreenHeader, Segmented, Sheet, useToast } from "@/src/ui";
 import { track } from "@/src/analytics";
 
@@ -21,15 +22,15 @@ export default function Customize() {
   const tileWidth = (width - spacing.lg * 2 - spacing.sm * (columns - 1)) / columns;
   const router = useRouter();
   const toast = useToast();
-  const { refresh, isPremium } = useAuth();
+  const { user, refresh, isPremium } = useAuth();
   const [items, setItems] = useState<Cosmetic[]>([]);
   const [equipped, setEquipped] = useState<Equipped>(DEFAULT_EQUIPPED);
   const [preview, setPreview] = useState<Equipped>(DEFAULT_EQUIPPED);
   const [cat, setCat] = useState<keyof Equipped>("shape");
   const [saving, setSaving] = useState(false);
-  const [todayState, setTodayState] = useState<BuddyState>("neutral");
+  const [todayNom, setTodayNom] = useState<NomState | null>(null);
   const [expression, setExpression] = useState<"today" | "happy" | "sad">("today");
-  const previewState = expression === "today" ? todayState : expression === "happy" ? "celebrating" : "tired";
+  const previewNom = expression === "today" ? (todayNom ?? nomFromLegacy("neutral")) : nomFromLegacy(expression === "happy" ? "celebrating" : "tired");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [locked, setLocked] = useState<Cosmetic | null>(null);
@@ -37,7 +38,7 @@ export default function Customize() {
   async function load() {
     setErr(null);
     try { const r = await api.cosmetics(); setItems(r.items); setEquipped(r.equipped); setPreview(r.equipped); } catch (e: any) { setErr(e.message); } finally { setLoading(false); }
-    api.summaryToday().then(s => setTodayState(s.buddy.state)).catch(() => {});
+    api.summaryToday().then(s => setTodayNom(s.nom ?? nomFromLegacy(s.buddy.state))).catch(() => {});
   }
   useEffect(() => { load(); }, [isPremium]);
 
@@ -55,9 +56,9 @@ export default function Customize() {
   const list = items.filter(i => i.category === cat);
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScreenHeader title="Customize Buddy" onBack={() => router.back()} right={!isPremium ? <Pressable onPress={() => router.push("/paywall")} testID="customize-premium"><PremiumBadge small /></Pressable> : undefined} />
+      <ScreenHeader title={`Customize ${user?.nom_name ?? "Nom"}`} onBack={() => router.back()} right={!isPremium ? <Pressable onPress={() => router.push("/paywall")} testID="customize-premium"><PremiumBadge small /></Pressable> : undefined} />
       <View style={styles.stage}>
-        <BuddyAvatar state={previewState} equipped={preview} size={150} testID="buddy-preview" />
+        <BuddyAvatar nom={previewNom} equipped={preview} size={150} testID="buddy-preview" />
         <View style={styles.expressionPicker}>
           <Text style={styles.previewLabel} testID="expression-preview-label">PREVIEW EXPRESSIONS</Text>
           <Segmented value={expression} onChange={setExpression} options={[{ value: "today", label: "Today" }, { value: "happy", label: "Happy" }, { value: "sad", label: "Low energy" }]} />
@@ -79,7 +80,7 @@ export default function Customize() {
               <Pressable key={c.id} testID={`cosmetic-${c.id}`} disabled={saving} onPress={() => select(c)} accessibilityRole="radio" accessibilityState={{ checked: on, selected: on, disabled: saving }} accessibilityLabel={`${c.name}${on ? ", selected" : ""}${c.available ? "" : c.unlock_type === "achievement" ? ", achievement locked" : ", premium"}`}
                 style={({ pressed }) => [styles.tile, { width: tileWidth }, on && styles.tileOn, pressed && { opacity: 0.85 }]}>
                 <View style={{ opacity: c.available ? 1 : 0.55 }}>
-                  <BuddyAvatar state={previewState} equipped={{ ...DEFAULT_EQUIPPED, shape: preview.shape, skin: preview.skin, [cat]: c.id }} size={74} animate={false} showBackground={cat === "background"} />
+                  <BuddyAvatar nom={previewNom} equipped={{ ...DEFAULT_EQUIPPED, shape: preview.shape, skin: preview.skin, [cat]: c.id }} size={74} animate={false} showBackground={cat === "background"} />
                 </View>
                 <Text style={styles.tileName} numberOfLines={2}>{c.name}</Text>
                 {on && <View testID={`cosmetic-${c.id}-selected`} style={styles.selectedMark}><Icon name="checkmark-circle" size={16} color={colors.brandPrimary} /></View>}
@@ -95,7 +96,7 @@ export default function Customize() {
       <Sheet visible={!!locked} onClose={() => setLocked(null)}>
         <View style={{ alignItems: "center", gap: spacing.sm }}>
           {locked && <BuddyAvatar state="celebrating" equipped={{ ...preview, [locked.category]: locked.id }} size={140} />}
-          <Text style={styles.lockTitle}>{locked?.unlock_type === "achievement" ? `Unlock ${locked?.name} with an achievement` : "Unlock Buddy Style"}</Text>
+          <Text style={styles.lockTitle}>{locked?.unlock_type === "achievement" ? `Unlock ${locked?.name} with an achievement` : `Unlock ${user?.nom_name ?? "Nom"} Style`}</Text>
           {locked?.unlock_type === "achievement" ? (
             <>
               <Text style={styles.lockSub}>This item is a reward. Keep your streak going and check Achievements to see how to earn it.</Text>
@@ -104,7 +105,7 @@ export default function Customize() {
           ) : (
             <>
               <Text style={styles.lockSub}>Upgrade to NomNom Premium to unlock:</Text>
-              {["All Buddy outfits", "Premium accessories", "Exclusive skins", "Seasonal items", "AI coaching features"].map(b => <View key={b} style={styles.benefit}><Icon name="checkmark" size={16} color={colors.success} /><Text style={styles.benefitText}>{b}</Text></View>)}
+              {["All Nom outfits", "Premium accessories", "Exclusive skins", "Seasonal items", "AI coaching features"].map(b => <View key={b} style={styles.benefit}><Icon name="checkmark" size={16} color={colors.success} /><Text style={styles.benefitText}>{b}</Text></View>)}
               <Button title="Try Premium" onPress={() => { setLocked(null); router.push("/paywall"); }} style={{ alignSelf: "stretch", marginTop: spacing.sm }} testID="locked-try-premium" />
             </>
           )}

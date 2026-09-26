@@ -19,8 +19,9 @@ export type Profile = {
   pace_lb_per_week?: number; diet?: string | null; allergies?: string[]; units?: "imperial" | "metric"; start_weight_kg?: number;
 };
 export type Equipped = { skin: string; hat: string; glasses: string; accessory: string; outfit: string; background: string; shape: string; shoes: string };
+export type LegalStatus = { terms_version: string | null; privacy_version: string | null; accepted_at: string | null; current_terms_version: string; current_privacy_version: string; update_required: boolean };
 export type PublicUser = {
-  id: string; email: string; name: string; username: string; plan: "free" | "premium";
+  id: string; email: string; name: string; username: string; plan: "free" | "premium"; nom_name: string; legal: LegalStatus;
   onboarding_complete: boolean; profile: Profile; targets: Targets; streak_days: number; longest_streak: number; targets_rationale?: string[]; streak_freeze?: StreakFreeze; level?: number; leveled_today?: boolean;
   buddy: { equipped: Equipped }; unlocked_cosmetics: string[]; achievements: { id: string; unlocked_at: string }[];
   notifications: Record<string, boolean>; privacy: Record<string, boolean>; macro_mode?: "auto" | "manual";
@@ -39,10 +40,13 @@ export type FoodItemIn = {
 };
 export type BuddyState = "neutral" | "doing_well" | "excellent" | "tired" | "celebrating" | "needs_hydration" | "needs_protein" | "full";
 export type BuddyReaction = { id: string; date: string; kind: string; direction: "improved" | "worsened" | "noted"; change: number; message: string; summary: DaySummary };
+export type MoodOption = { id: string; label: string; icon: string };
+export type MoodCheckin = { id: string; date: string; states: string[]; text: string | null; interpreted: string[]; method: string | null; created_at: string; updated_at: string };
+export type LegalDoc = { title: string; version: string; effective: string; intro: string; sections: { h: string; p: string[] }[] };
 export type DaySummary = {
   date: string; calories_in: number; calories_burned: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number;
-  entries: number; meals_logged: number; targets: Targets; nutrition_score: number; day_label: string;
-  buddy: { state: BuddyState; headline: string; message: string }; streak_days?: number; streak_freeze?: StreakFreeze; level?: number; leveled_today?: boolean; score_explanation?: string;
+  entries: number; meals_logged: number; targets: Targets; nutrition_score: number; day_label: string; moods?: string[]; nom?: import("./nom-state").NomState;
+  buddy: { state: BuddyState; headline: string; message: string; nom?: import("./nom-state").NomState }; streak_days?: number; streak_freeze?: StreakFreeze; level?: number; leveled_today?: boolean; score_explanation?: string;
 };
 export type DbFood = {
   provider: string; provider_id: string; name: string; brand: string | null; serving_label: string; serving_g: number;
@@ -100,17 +104,23 @@ async function request<T = any>(path: string, init: RequestInit = {}): Promise<T
 const json = (body: unknown) => JSON.stringify(body);
 
 export const api = {
-  signup: (email: string, password: string, name: string, invite_code?: string) => request<{ access_token: string; user: PublicUser }>("/auth/signup", { method: "POST", body: json({ email, password, name, invite_code: invite_code || undefined }) }),
+  signup: (email: string, password: string, name: string, invite_code?: string) => request<{ access_token: string; user: PublicUser }>("/auth/signup", { method: "POST", body: json({ email, password, name, invite_code: invite_code || undefined, accept_terms: true }) }),
   login: (email: string, password: string) => request<{ access_token: string; user: PublicUser }>("/auth/login", { method: "POST", body: json({ email, password }) }),
   me: () => request<PublicUser>("/auth/me"),
   usage: () => request<Record<string, { used: number; limit: number | null }>>("/me/usage"),
-  updateMe: (payload: { name?: string; username?: string; profile?: Profile; targets?: Partial<Targets>; auto_macros?: boolean }) => request<PublicUser>("/me", { method: "PATCH", body: json(payload) }),
+  updateMe: (payload: { name?: string; username?: string; nom_name?: string; profile?: Profile; targets?: Partial<Targets>; auto_macros?: boolean }) => request<PublicUser>("/me", { method: "PATCH", body: json(payload) }),
   onboarding: (profile: Profile, name?: string) => request<PublicUser>("/me/onboarding", { method: "POST", body: json({ profile, name }) }),
   previewTargets: (profile: Profile, calories?: number) => request<TargetPreview>("/me/targets/preview", { method: "POST", body: json({ ...profile, calories }) }),
   updateNotifications: (prefs: Record<string, boolean>) => request<Record<string, boolean>>("/me/notifications", { method: "PATCH", body: json(prefs) }),
   updatePrivacy: (prefs: Record<string, boolean>) => request<Record<string, boolean>>("/me/privacy", { method: "PATCH", body: json(prefs) }),
   syncEntitlement: (premium: boolean) => request<PublicUser>("/me/entitlement", { method: "POST", body: json({ premium, source: "revenuecat" }) }),
   deleteAccount: () => request("/me", { method: "DELETE" }),
+  legalDoc: (doc: "terms" | "privacy") => request<LegalDoc>(`/legal/${doc}`),
+  acceptLegal: () => request<LegalStatus>("/me/legal/accept", { method: "POST" }),
+  moodToday: () => request<{ checkin: MoodCheckin | null; options: MoodOption[] }>("/mood/today"),
+  moodCheckin: (states: string[], text?: string) => request<{ checkin: MoodCheckin; unmatched_text: boolean }>("/mood/checkin", { method: "POST", body: json({ states, text: text || undefined }) }),
+  clearMood: () => request<{ deleted: boolean }>("/mood/today", { method: "DELETE" }),
+  moodHistory: (days = 30) => request<{ items: MoodCheckin[]; counts: Record<string, number>; days: number }>(`/mood/history?days=${days}`),
 
   foodDay: (date?: string) => request<FoodDay>(`/food${date ? `?date=${date}` : ""}`),
   logFood: (item: FoodItemIn) => request<FoodEntry & { unlocked: Achievement[] }>("/food", { method: "POST", body: json(item) }),

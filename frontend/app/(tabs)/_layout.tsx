@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { useThemeStyles, ThemeColors, useTheme, shadow } from "@/src/theme";
 import { Icon, IconName } from "@/src/ui";
 import { useAddSheet } from "@/src/add-sheet";
+import { useAuth } from "@/src/auth-context";
 
 function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
   const { colors } = useTheme();
@@ -24,6 +25,7 @@ function AddButton() {
 }
 
 export default function TabsLayout() {
+  const { user } = useAuth();
   const { colors } = useTheme();
   return (
     <Tabs
@@ -35,7 +37,7 @@ export default function TabsLayout() {
         tabBarStyle: { backgroundColor: colors.surfaceSecondary, borderTopColor: colors.border, borderTopWidth: 1, height: Platform.OS === "web" ? 64 : 84, paddingTop: 6 },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Buddy", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "happy" : "happy-outline"} focused={focused} /> }} />
+      <Tabs.Screen name="index" options={{ title: user?.nom_name ?? "Nom", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "happy" : "happy-outline"} focused={focused} /> }} />
       <Tabs.Screen name="log" options={{ title: "Log", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "restaurant" : "restaurant-outline"} focused={focused} /> }} />
       <Tabs.Screen name="add" options={{ title: "", tabBarButton: () => <AddButton /> }} listeners={{ tabPress: e => e.preventDefault() }} />
       <Tabs.Screen name="progress" options={{ title: "Progress", tabBarIcon: ({ focused }) => <TabIcon name={focused ? "stats-chart" : "stats-chart-outline"} focused={focused} /> }} />

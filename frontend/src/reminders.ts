@@ -3,6 +3,7 @@
 import { Linking, Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
+import { pushRegistered } from "./push";
 export type ReminderPrefs = Record<string, boolean>;
 
 // Default times (24h). Editable later via preferences.times.
@@ -57,7 +58,10 @@ export async function syncReminders(prefs: ReminderPrefs, times: Record<string, 
     content: { ...COPY[key], data: { kind: key } },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, ...parseTime(time), channelId: "reminders" } as Notifications.DailyTriggerInput,
   });
-  for (const key of ["breakfast", "lunch", "dinner", "streak"]) if (prefs[key]) await daily(key, t[key]);
+  // When the account is registered for remote push, meal + streak reminders come from the server (they can include what
+  // you're low on); only hydration stays local.
+  const remote = await pushRegistered();
+  for (const key of ["breakfast", "lunch", "dinner", "streak"]) if (prefs[key] && !remote) await daily(key, t[key]);
   if (prefs.hydration) for (const h of HYDRATION_HOURS) await daily("hydration", `${String(h).padStart(2, "0")}:00`);
   if (prefs.weekly_report) {
     await Notifications.scheduleNotificationAsync({

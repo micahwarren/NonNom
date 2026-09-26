@@ -12,7 +12,13 @@
       "bundleIdentifier": "com.emergent.healthbuddy.cfwaxa",
       "infoPlist": {
         "NSCameraUsageDescription": "Scan meals to log nutrition instantly",
-        "NSPhotoLibraryUsageDescription": "Pick a food photo to log nutrition"
+        "NSPhotoLibraryUsageDescription": "Pick a food photo to log nutrition",
+        "NSUserNotificationsUsageDescription": "Get gentle meal, streak and friend reminders"
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.emergent.healthbuddy.cfwaxa"
+        ]
       }
     },
     "android": {
@@ -23,6 +29,7 @@
       "package": "com.emergent.healthbuddy.cfwaxa",
       "permissions": [
         "CAMERA",
+        "POST_NOTIFICATIONS",
         "READ_EXTERNAL_STORAGE"
       ]
     },
@@ -61,7 +68,20 @@
         }
       ],
       "expo-sharing",
-      "@react-native-vector-icons/ionicons"
+      "@react-native-vector-icons/ionicons",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#FF7369"
+        }
+      ],
+      [
+        "@bacons/apple-targets",
+        {
+          "appleTeamId": "[APPLE_TEAM_ID]"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

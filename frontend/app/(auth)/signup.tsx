@@ -3,11 +3,12 @@ import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator,
 } from "react-native";
-import { Link, useLocalSearchParams } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/src/auth-context";
 import { useThemeStyles, ThemeColors, spacing, radius } from "@/src/theme";
 import { BuddyAvatar } from "@/src/buddy";
+import { Icon } from "@/src/ui";
 
 export default function Signup() {
   const { colors, styles } = useThemeStyles(createStyles);
@@ -18,11 +19,15 @@ export default function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agree, setAgree] = useState(false);
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function submit() {
-    setErr(null); setBusy(true);
+    setErr(null);
+    if (!agree) { setErr("Please accept the Terms of Service and Privacy Policy to continue."); return; }
+    setBusy(true);
     try { await signUp(email.trim(), password, name.trim(), invite.trim() || undefined); }
     catch (e: any) { setErr(e.message ?? "Signup failed"); }
     finally { setBusy(false); }
@@ -56,6 +61,11 @@ export default function Signup() {
           <Text style={styles.label}>Invite code <Text style={{ color: colors.muted }}>(optional)</Text></Text>
           <TextInput testID="signup-invite-input" value={invite} onChangeText={setInvite} style={styles.input} autoCapitalize="characters" autoCorrect={false} placeholder="From a friend" placeholderTextColor={colors.muted} />
         </View>
+
+        <Pressable testID="signup-agree" onPress={() => setAgree(a => !a)} style={styles.agreeRow} accessibilityRole="checkbox" accessibilityState={{ checked: agree }} accessibilityLabel="I agree to the Terms of Service and Privacy Policy">
+          <View style={[styles.checkbox, agree && styles.checkboxOn]}>{agree && <Icon name="checkmark" size={16} color={colors.onBrandPrimary} />}</View>
+          <Text style={styles.agreeText}>I agree to the <Text style={styles.inlineLink} onPress={() => router.push("/legal?doc=terms" as any)} testID="signup-terms-link">Terms of Service</Text> and <Text style={styles.inlineLink} onPress={() => router.push("/legal?doc=privacy" as any)} testID="signup-privacy-link">Privacy Policy</Text>. NomNom gives nutrition estimates, not medical advice.</Text>
+        </Pressable>
 
         {err && <Text style={styles.err} testID="signup-error">{err}</Text>}
 
@@ -92,4 +102,9 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   ctaText: { color: colors.onBrandPrimary, fontSize: 17, fontWeight: "800" },
   link: { color: colors.brandPrimary, textAlign: "center", fontWeight: "700", marginTop: spacing.md },
   err: { color: colors.error, textAlign: "center", fontWeight: "600" },
+  agreeRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start", minHeight: 44, paddingVertical: spacing.xs },
+  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  checkboxOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  agreeText: { flex: 1, fontSize: 13, color: colors.onSurfaceSecondary, lineHeight: 19 },
+  inlineLink: { color: colors.brandPrimary, fontWeight: "700" },
 });
