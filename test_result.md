@@ -104,6 +104,25 @@
 
 user_problem_statement: "Simplify Buddy and Log; one cup water; advice info popup; horizontal daily history; fix subscription layout and Edit Goal; new outfits, funny accessories and shaped Noms with responsive expressions; optional dark mode."
 frontend:
+  - task: "Protein must scale when calorie target changes"
+    implemented: true
+    working: true
+    needs_retesting: false
+    stuck_count: 1
+    priority: "high"
+    status_history:
+      - agent: "testing"
+        working: true
+        comment: "Finalreport13: protein111->97at2400->2100, carbs/fatrebalance; methodSheetnormalcloseafterlastsourceat390x844and320x568passes. Report12backend8/8alreadyverifiedsave/reopen/up/down/manual/weightpreservation. No current-scopebugs remain."
+      - agent: "testing"
+        working: true
+        comment: "Iteration12 verifies requestedproteinbug:8/8 backend, UI2400P111->2100P97->2700P124, save/reopen/manual/water+weightpreserved. Supplementary methodclose viewport issue recurred withlongertext. Main nowexplicitlyboundsbody toremainingheight aftermeasuredheader/footer; finalfocusedcheckpending."
+      - agent: "user"
+        working: false
+        comment: "Only fat and carbs change when calorie goal changes; protein must change too."
+      - agent: "main"
+        working: "NA"
+        comment: "Previous g/kg-first planner held protein fixed below its cap. New planner derives a stable protein energy share from profile-based calorie estimate and goal/activity/planning weight, then scales protein with edited calories. Stable profile baseline prevents save/reopen resets and ratio drift. Existing AMDR/carbohydrate safeguards and manual mode remain. UI explains scaling and exposes percentage; rationale clearly separates app budget rule from biological needs. No actual user goals mutated. Needs targeted testing-agent verification of down/up/save/reopen and current APIs."
   - task: "Unused photo scan refund, larger Buddy, top subscription, evidence-informed automatic macros"
     implemented: true
     working: true
@@ -218,7 +237,7 @@ backend:
         working: "NA"
         comment: "Catalog defaults support old users; shape/shoes validated by equip endpoint with existing free/premium checks. No auth credentials changed."
 test_plan:
-  current_focus: ["Current requested scan/layout/macro scope complete; earlier physical Expo Go crash confirmation remains separate"]
+  current_focus: ["Protein scaling bug complete and verified by reports12/13"]
   test_all: false
 agent_communication:
   - agent: "main"

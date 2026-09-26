@@ -270,6 +270,10 @@ export function Sheet({ visible, onClose, title, children, footer, scroll = true
   const { styles: s } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  const [headerHeight, setHeaderHeight] = useState(100);
+  const [footerHeight, setFooterHeight] = useState(64);
+  const sheetHeight = height - insets.top - spacing.md;
+  const bodyHeight = Math.max(0, Math.min(560, sheetHeight - insets.bottom - spacing.lg - spacing.sm - headerHeight - (footer ? footerHeight : 0)));
   const y = useSharedValue(400);
   useEffect(() => { if (visible) y.value = withTiming(0, { duration: 260, easing: Easing.out(Easing.cubic) }); else y.value = 400; }, [visible, y]);
   const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
@@ -278,11 +282,13 @@ export function Sheet({ visible, onClose, title, children, footer, scroll = true
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <Pressable testID={`${testID}-backdrop`} style={s.backdrop} onPress={onClose} accessibilityLabel="Close sheet" />
-        <Animated.View testID={testID} accessibilityViewIsModal style={[s.sheet, { maxHeight: height - insets.top - spacing.md, paddingBottom: insets.bottom + spacing.lg }, st]}>
-          <View style={s.grabber} />
-          {title && <Text style={s.sheetTitle}>{title}</Text>}
-          <Body testID={`${testID}-body`} style={[s.sheetBody, { maxHeight: 560 }]} contentContainerStyle={scroll ? { gap: spacing.sm, paddingBottom: spacing.sm } : undefined} keyboardShouldPersistTaps="handled">{children}</Body>
-          {footer && <View testID={`${testID}-footer`} style={s.sheetFooter}>{footer}</View>}
+        <Animated.View testID={testID} accessibilityViewIsModal style={[s.sheet, { maxHeight: sheetHeight, paddingBottom: insets.bottom + spacing.lg }, st]}>
+          <View onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
+            <View style={s.grabber} />
+            {title && <Text style={s.sheetTitle}>{title}</Text>}
+          </View>
+          <Body testID={`${testID}-body`} style={[s.sheetBody, { maxHeight: bodyHeight }]} contentContainerStyle={scroll ? { gap: spacing.sm, paddingBottom: spacing.sm } : undefined} keyboardShouldPersistTaps="handled">{children}</Body>
+          {footer && <View testID={`${testID}-footer`} onLayout={event => setFooterHeight(event.nativeEvent.layout.height)} style={s.sheetFooter}>{footer}</View>}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>

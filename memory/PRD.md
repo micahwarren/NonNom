@@ -62,6 +62,12 @@
 - QA note: demo account's goal is currently Maintain weight after the tester's goal-editor scenario; exact prior profile snapshot was not retained. Equipment restored to defaults and light theme restored in test browser. Starting-weight anchor remains preserved; no existing food history was removed.
 
 ## Current backlog
+### Current follow-up: protein must scale with calorie edits
+- User reported protein staying fixed while carbs/fat changed. Replaced fixed g/kg-first final protein with a calorie-scaled protein energy share anchored to the existing profile-derived calorie estimate and goal/activity/planning-weight protein baseline.
+- Protein now scales down/up with edited calories while keeping adult macro safeguards, carb floor, manual override and integer rounding. Stable profile denominator avoids save/reopen resets. UI and sources explain the difference between the evidence-informed baseline and the app's requested calorie-scaling choice.
+- Verified by testing-agent reports12/13:8/8 backend regression; UI2,400kcal→111g protein,2,100→97g,2,700→124g; save/reopen and deterministic return-to-prior-calories work, manual mode preserved, weight/water unaffected. Prior fixed-protein plateau is superseded for automatic mode.
+- Supplementary recurring method-sheet close issue resolved by explicitly budgeting body height from viewport minus measured header/footer/padding, not relying on nested max-height/flex negotiation. Final agent report13 confirms normal close after scrolling at390x844and320x568, no remaining current-scope issues. An obsolete iteration8 fixed-grams assertion was updated to the new scaling contract.
+
 ### Latest completed scope: scan refunds, Buddy focus, settings, macro planning
 - Nearby restaurant/Google Maps idea explicitly cancelled. No Google integration, key, menu estimates, or location feature was added.
 - Unused photo scans now return their free allowance via Start over. Each successful analysis returns `scan_id`; `scan_credits.py` uses atomic unused/logging/consumed/discarded transitions shared by logging and refunding. Refunds are owner-scoped and idempotent, used scans cannot refund even after deleting the food, and refunded results cannot subsequently be logged as that scan. Old/manual/recent/saved logging remains compatible. Premium limits remain unchanged (unlimited).

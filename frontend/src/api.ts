@@ -12,7 +12,7 @@ export function registerEntitlementSync(sync: () => Promise<void>) {
 const needsEntitlement = (path: string) => ["/ai/feed-me", "/food/photo/analyze", "/food/describe", "/me/usage", "/buddy/cosmetics", "/buddy/equip", "/saved-meals"].includes(path.split("?")[0]);
 
 export type Targets = { calories: number; protein_g: number; carbs_g: number; fat_g: number; water_ml: number };
-export type TargetPreview = Targets & { rationale?: string[]; fiber_g?: number; warnings?: string[]; sources?: { id: string; title: string; url: string }[]; reference_weight_kg?: number; protein_g_per_kg?: number; macro_calories?: number };
+export type TargetPreview = Targets & { rationale?: string[]; fiber_g?: number; warnings?: string[]; sources?: { id: string; title: string; url: string }[]; reference_weight_kg?: number; protein_g_per_kg?: number; macro_calories?: number; baseline_calories?: number; baseline_protein_g?: number; protein_energy_percent?: number };
 export type Profile = {
   goal?: "lose" | "maintain" | "gain" | "improve"; age?: number; height_cm?: number; weight_kg?: number;
   goal_weight_kg?: number; sex?: "male" | "female" | "unspecified"; activity_level?: string;

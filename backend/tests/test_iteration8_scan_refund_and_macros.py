@@ -376,7 +376,7 @@ def test_recommend_macros_ranges_and_energy_bounds(calories):
     assert abs(rec["macro_calories"] - calories) <= 2
 
 
-# explicit checkpoint from request: 2400->~200g and 2100->~180g for active lose profile
+# Updated requirement: protein scales with calories, rather than fixed g/kg grams.
 def test_recommend_macros_active_lose_transitions_2400_to_2100_reasonably():
     import sys
     sys.path.append("/app/backend")
@@ -391,8 +391,9 @@ def test_recommend_macros_active_lose_transitions_2400_to_2100_reasonably():
     }
     at_2400 = recommend_macros(profile, 2400)
     at_2100 = recommend_macros(profile, 2100)
-    assert at_2400["protein_g"] == 200
-    assert 178 <= at_2100["protein_g"] <= 186
+    assert at_2100["protein_g"] < at_2400["protein_g"]
+    assert abs(at_2100["protein_g"] - at_2400["protein_g"] * 2100 / 2400) <= 1
+    assert at_2100["protein_energy_percent"] == at_2400["protein_energy_percent"]
 
 
 # macro API save path: auto mode ignores stale client macros and preserves unrelated fields

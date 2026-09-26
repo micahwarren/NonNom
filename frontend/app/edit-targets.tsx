@@ -80,7 +80,7 @@ export default function EditTargets() {
           <View style={styles.modeRow}>
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={styles.label} testID="macro-mode-label">Auto-adjust macros</Text>
-              <Text style={styles.hint} testID="macro-mode-description">{automatic ? "Uses your goal, activity, and planning weight" : "Manual targets — edit each macro yourself"}</Text>
+              <Text style={styles.hint} testID="macro-mode-description">{automatic ? "Protein, carbs, and fat adjust with calories" : "Manual targets — edit each macro yourself"}</Text>
             </View>
             <Switch testID="auto-macros-toggle" accessibilityLabel="Auto-adjust macros" value={automatic} onValueChange={setAutomatic} disabled={busy} trackColor={{ false: colors.borderStrong, true: colors.brandPrimary }} />
           </View>
@@ -97,8 +97,8 @@ export default function EditTargets() {
         </Card>
         {automatic && preview && <Card style={{ gap: spacing.sm }} testID="macro-evidence-card">
           <View style={styles.loadingRow}><Icon name="flask-outline" color={colors.protein} /><Text style={styles.label}>Evidence-informed, not guessed</Text></View>
-          <Text style={styles.hint} testID="macro-reference-weight">Planning weight: {preview.reference_weight_kg} kg. Protein starts at {preview.protein_g_per_kg} g/kg, then fits the calorie budget.</Text>
-          <Text style={styles.hint}>Protein may stay the same when calories change; weight-based needs do not automatically fall with every calorie reduction.</Text>
+          <Text style={styles.hint} testID="macro-reference-weight">Planning weight: {preview.reference_weight_kg} kg. Your goal and activity set a protein baseline of {preview.baseline_protein_g} g at {preview.baseline_calories} kcal.</Text>
+          <Text style={styles.hint} testID="protein-scaling-explanation">Protein starts from {preview.protein_energy_percent}% of your calorie budget, so it changes when calories change. Whole-gram rounding and nutrition safeguards still apply.</Text>
           <Button title="How this is calculated · sources" variant="ghost" onPress={() => setMethodOpen(true)} testID="macro-method-button" />
         </Card>}
         {automatic && preview?.warnings?.map((warning, index) => <Text key={warning} style={styles.warning} testID={`macro-warning-${index}`}>{warning}</Text>)}
