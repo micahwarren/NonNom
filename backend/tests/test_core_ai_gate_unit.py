@@ -1,6 +1,7 @@
 """Pure unit tests for core.ai_gate free-tier limits and premium bypass."""
 
 import sys
+from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -26,7 +27,8 @@ async def test_ai_gate_premium_bypasses_exhausted_counters(monkeypatch, usage_ty
 
     monkeypatch.setattr(core, "db", lambda: _DB())
 
-    premium_user = {"_id": "premium-id", "plan": "premium"}
+    premium_user = {"_id": "premium-id", "plan": "premium", "entitlement_source": "revenuecat_server",
+                    "entitlement_verified_at": core.now_utc(), "entitlement_valid_until": core.now_utc() + timedelta(minutes=5)}
     await core.ai_gate(premium_user, usage_type, tz=0)
 
     assert calls["count"] == 0

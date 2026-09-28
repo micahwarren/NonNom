@@ -14,6 +14,13 @@ const BENEFITS = [
   "Advanced progress insights", "Buddy's full weekly report", "Unlimited AI meal suggestions and saved meals", "Future premium features",
 ];
 const LEGAL = { terms: process.env.EXPO_PUBLIC_TERMS_URL, privacy: process.env.EXPO_PUBLIC_PRIVACY_URL };
+const TARGET_USD_PRICING = { monthly: 7.99, annual: 49.99 } as const;
+
+function monthlyEquivalent(pkg: PurchasesPackage) {
+  const monthly = pkg.product.price / 12;
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: pkg.product.currencyCode, maximumFractionDigits: 2 }).format(monthly); }
+  catch { return `$${monthly.toFixed(2)}`; }
+}
 
 export default function Paywall() {
   const { colors, styles } = useThemeStyles(createStyles);
@@ -35,6 +42,9 @@ export default function Paywall() {
   const monthly = pkgs.find(p => p.identifier === "$rc_monthly" || p.packageType === "MONTHLY");
   const chosen = selected === "annual" ? annual : monthly;
   const savings = annual && monthly && monthly.product.price > 0 ? Math.round((1 - annual.product.price / (monthly.product.price * 12)) * 100) : null;
+  const pricingMatchesTarget = !monthly || !annual || monthly.product.currencyCode !== "USD" || (
+    Math.abs(monthly.product.price - TARGET_USD_PRICING.monthly) < 0.01 && Math.abs(annual.product.price - TARGET_USD_PRICING.annual) < 0.01
+  );
 
   async function buy(pkg: PurchasesPackage) {
     if (!user) { setError("Sign in before purchasing Premium."); return; }
@@ -100,13 +110,14 @@ export default function Paywall() {
                 </Card>
               ) : (
                 <View style={{ gap: spacing.sm }}>
-                  {annual && <PlanRow pkg={annual} label="Yearly" selected={selected === "annual"} onPress={() => setSelected("annual")} badge={savings && savings > 0 ? `Best value · save ${savings}%` : "Best value"} sub={`${annual.product.priceString}/year`} testID="plan-annual" />}
+                  {annual && <PlanRow pkg={annual} label="Yearly" selected={selected === "annual"} onPress={() => setSelected("annual")} badge={savings && savings > 0 ? `Best value · Save ${savings}%` : "Best value"} sub={`${annual.product.priceString}/year · ${monthlyEquivalent(annual)}/month`} testID="plan-annual" />}
                   {monthly && <PlanRow pkg={monthly} label="Monthly" selected={selected === "monthly"} onPress={() => setSelected("monthly")} sub={`${monthly.product.priceString}/month`} testID="plan-monthly" />}
                 </View>
               )}
 
             {purchaseIdentityError && <View style={styles.banner}><Icon name="alert-circle" size={16} color={colors.error} /><Text style={styles.bannerText}>Purchases are temporarily unavailable: account link failed. Sign out and back in to retry.</Text></View>}
             {rcSimulated && pkgs.length > 0 && <Text style={styles.simulated}>Preview mode: purchases here are simulated through RevenueCat’s Test Store. Real billing happens in the App Store / Play Store build.</Text>}
+            {rcSimulated && !pricingMatchesTarget && <View style={styles.banner} testID="pricing-config-warning"><Icon name="alert-circle" size={16} color={colors.error} /><Text style={styles.bannerText}>Update the RevenueCat Test Store products to $7.99/month and $49.99/year so preview pricing matches launch pricing.</Text></View>}
             {error && <Text style={styles.err} testID="purchase-error">{error}</Text>}
 
             <Button title="Start Premium" size="lg" onPress={() => chosen && setConfirm(chosen)} disabled={!chosen || !identityReady || isPurchasing || syncing} loading={isPurchasing || syncing} testID="start-premium" />

@@ -184,7 +184,7 @@ export default function Home() {
         <Button title="Got it" onPress={() => setBuddyInfo(false)} testID="buddy-info-close" style={{ marginTop: spacing.md }} />
       </Sheet>
       <Sheet visible={streakInfo} onClose={() => setStreakInfo(false)} title={`${streak}-day streak`}>
-        <Text style={styles.infoText}>{`Log at least one food a day to keep your streak going. ${nomName} also levels up once per logged day — the higher the level, the cooler ${nomName} looks.`}</Text>
+        <Text style={styles.infoText}>{`Log at least one food a day to keep your streak going. Missing a day never erases the progress you’ve made, and your weekly Streak Freeze can protect one missed day. ${nomName} also levels up once per logged day.`}</Text>
         <View style={styles.freezeRow} testID="streak-freeze-status">
           <Icon name="shield-checkmark" size={20} color={freeze?.available ? colors.water : colors.muted} />
           <View style={{ flex: 1 }}>

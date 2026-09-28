@@ -1,5 +1,6 @@
 """NomNom API entrypoint. Routes live in routes_*.py; shared helpers in core.py; nutrition logic in nutrition.py."""
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from routes_food import router as food_router
 from routes_tracking import router as tracking_router
 from routes_social import router as social_router
 from routes_mood import router as mood_router
+from password_recovery import router as recovery_router
 from push import router as push_router, start_scheduler, ensure_indexes as push_indexes
 
 
@@ -30,9 +32,11 @@ async def lifespan(app: FastAPI):
     await db.saved_meals.create_index("user_id")
     await db.referrals.create_index("invitee_id", unique=True)
     await db.mood_checkins.create_index([("user_id", 1), ("date", -1)], unique=True)
-    if not await db.users.find_one({"email": "demo@nomnom.app"}):
-        doc = new_user_doc("demo@nomnom.app", "DemoPass123!", "Demo")
+    await db.auth_rate_limits.create_index("expires_at", expireAfterSeconds=0)
+    if os.getenv("ENABLE_DEMO_ACCOUNT", "false").lower() == "true" and os.getenv("DEMO_ACCOUNT_PASSWORD") and not await db.users.find_one({"email": "demo@nomnom.app"}):
+        doc = new_user_doc("demo@nomnom.app", os.environ["DEMO_ACCOUNT_PASSWORD"], "Demo")
         doc["username"] = "demo"
+        doc["is_demo_account"] = True
         await db.users.insert_one(doc)
         logger.info("Seeded demo user")
     await push_indexes()
@@ -54,6 +58,7 @@ async def root():
 
 
 api.include_router(auth_router)
+api.include_router(recovery_router)
 api.include_router(food_router)
 api.include_router(tracking_router)
 api.include_router(social_router)

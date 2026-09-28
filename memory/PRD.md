@@ -1,5 +1,13 @@
 # NomNom - Product Requirements Document
 
+## September 2026 security update
+
+See `SECURITY_UPDATE.md` for the current setup and validation notes. Premium now requires backend RevenueCat API verification (the earlier client mirror is no longer trusted). Shared demo login is disabled by default, and email-code password recovery is implemented with expiring single-use codes and session revocation. RevenueCat server credentials and SendGrid sender credentials require external configuration.
+
+## September 28, 2026 launch-readiness update
+
+See `NOMNOM_UPDATE_2026-09-28.md` for implementation and validation details. Nom reactions now use time-of-day pacing for calories, protein, and water instead of comparing morning intake with an entire-day target. Small overages use tolerant feedback, while the full/sleepy state is reserved for a meaningful overage (max of 225 kcal or 12% of the calorie target). Legal links are accessible before authentication and return to the in-progress signup flow. AI meal confirmation now supports editing food, serving size, quantity, calories, protein, carbs, and fat before logging. The paywall presents the intended launch pricing of $7.99 monthly and $49.99 annually (about $4.17/month, Save 48% for USD products), while production prices remain store/RevenueCat controlled.
+
 ## Vision
 "Your nutrition buddy that knows what you've eaten, understands your goals, and helps you decide what to eat next." 80% premium nutrition tracker, 20% Buddy character/gamification. Warm cream + coral brand.
 
@@ -14,13 +22,13 @@
 - Log screen: grouped by meal, totals, quick actions, tap-to-edit (servings scale macros, rename, calories, move meal), Log again (duplicate), 2-tap delete, per-date view (from Daily History)
 - Food search: USDA FoodData Central (generic first) + Open Food Facts (search-a-licious w/ search.pl fallback), 7-day cache, manual entry sheet, recent foods re-log
 - Barcode: expo-camera scanner (native) + typed barcode fallback, OFF lookup, 30-day product cache, not-found / error states with Search / Manual / Photo paths. No AI credits.
-- AI photo scan → editable multi-item confirm (qty ±, remove, add missed, meal) → batch log; labeled "AI estimate"
+- AI photo scan → editable multi-item confirm (food name, serving size, qty, calories, protein, carbs, fat; remove/add missed; choose meal) → batch log; labeled "AI estimate"
 - Describe Meal (typed/dictation) → items confirm → log
 - Feed Me: 3 AI suggestions w/ reason + recipe + "Log this" + "Another suggestion"; uses remaining macros, diet, allergies, time of day
 - Progress: 7D/30D/3M/1Y, weight line, calories bars vs goal, protein %, consistency, water, streak/longest, Buddy Weekly Report (deterministic from data; free users see 1 insight), Daily History
 - Buddy customization: 6 categories, 40 cosmetics from data catalog, live preview, premium lock sheet, achievement-locked items, entitlement lapse → fallback to defaults (ownership kept)
 - Achievements (8) with cosmetic rewards (7-day → headband, 30-day → gold crown, early bird → sweatband)
-- Premium: RevenueCat (entitlement `pro`, offering `default`, $rc_monthly/$rc_annual), coded paywall w/ dynamic prices, Restore Purchases (loading/none/found/error), Test Store simulated purchases labeled in preview, entitlement mirrored to backend via POST /me/entitlement, AI free limits enforced server-side (configurable FREE_AI_LIMITS)
+- Premium: RevenueCat (entitlement `pro`, offering `default`, $rc_monthly/$rc_annual), coded paywall w/ dynamic prices, Restore Purchases (loading/none/found/error), server-verified entitlement via POST /me/entitlement, AI free limits enforced server-side (configurable FREE_AI_LIMITS). Test purchases require a separate backend with sandbox explicitly enabled.
 - Profile: goal, targets (+ editor, recalc), Buddy, subscription (Manage Subscription), personal info/username, notification prefs, privacy prefs, units, support/terms/privacy, logout, delete account
 - Analytics abstraction (`src/analytics.ts` → POST /analytics/events)
 
@@ -44,7 +52,7 @@
 ### Not implemented (next session)
 - Remote push notifications (friend activity / achievements need server push; local reminders are on-device only)
 - Referral rewards (architecture ready: `referrals.reward_granted`)
-- RevenueCat webhook server verification (playbook keeps entitlement client-side; backend mirror is trust-on-sync)
+- Optional RevenueCat webhook for faster revocation propagation; current server API verification refreshes within five minutes and on purchase/restore.
 - Speech-to-text (uses OS keyboard dictation)
 
 ## Tech
@@ -84,7 +92,7 @@
 - Premium: identity binding + confirmed RevenueCat SDK CustomerInfo now synchronize the backend before gated requests (all three AI actions, usage, cosmetics, saved meals). UI Premium status follows the same confirmed server plan. Purchase/restore await any older sync then explicitly mirror the fresh SDK snapshot before showing success. Removed Premium’s 100-saved-meal cap; free caps retained. Existing free-limit errors clear on activation. Explicit persistent post-purchase/restore confirmation added.
 - Session race fixed: an old unauthorized request can no longer clear a token saved by a newer login. No passwords, JWT validation, or protected framework variables changed.
 - Every successful food creation/batch/edit/delete/duplicate/saved-meal log, water add/undo, activity log, and weight add/delete returns a unique before/after Nom reaction. Fractional changes use unrounded target distance rather than only integer score bands. Frontend queues visible reactions on logging screens and updates Buddy immediately; weight check-ins receive a neutral acknowledgment.
-- Full state at **food intake >= daily calorie target +100**, independent of exercise: rounder cartoon tummy, sleepy eyes, rest marks, matching headline and history label. Clears when corrected below threshold; does NOT change actual body weight or imply a medical assessment. Tired/negative feedback is target-relative, not judgmental.
+- Calorie-overage feedback now uses tolerance bands on **net calories**: a mild overage starts at max(100 kcal, 5% of target), while the rounder/sleepy full state is reserved for max(225 kcal, 12% of target). Daytime feedback also accounts for time-of-day pace, so early meals are not judged against the full-day target. This is target-relative feedback only; it does NOT change actual body weight or imply a medical assessment.
 - Headline remains exactly screen-centered using symmetric space; info glyph15px retains44px touch target.
 - Architecture: `backend/meal_suggestions.py`, `backend/buddy_reactions.py`, `frontend/src/buddy-events.ts`, `buddy-reaction-context.tsx`; existing auth/subscription contexts strengthened rather than replaced with a new auth provider.
 - Test reports 5/6/7: real FeedMe non-zero macros and free caps, all mutation IDs, fractional direction, +99.9/+100/reversal, layout390/320, actual RevenueCat Test Store checkout and provider receipt, Premium null limits, 101+ saved meals, account isolation, delayed401 race passed. Iteration6 pure/API suites12/12, iteration7 all-three-AI premium/free gates6/6; restore success card and Continue confirmed. Store billing remains simulated Test Store; no real charge performed. Current requested fixes verified by testing agent; no blockers reported. Profile restore testID renamed to distinguish it from the paywall’s control (test-only identifier change).
@@ -114,7 +122,7 @@
 - Client sends `X-TZ-Offset` header; all "today" logic is local-day aware.
 
 ## Session 4 (June 2026) — Nom State Engine, feelings, clothing rig, legal, widget, push
-- **Centralized Nom State Engine** `backend/nom_state.py` (`get_nom_state`) — layers: health_state (feeling check-in) > body_state (≥+100 kcal → full; hungry/light day → slim; bloated/full moods) > hydration/macro props > general score. Returns facialExpression / bodyState / accessories / animation / headline / message / priority / widgetState / legacyState. `nutrition.buddy_state` wraps it; `summary.nom` + `summary.moods` exposed. Frontend `src/nom-state.ts` types it, `nomFromLegacy` for static screens, `withReaction` overlays log reactions without overriding health/full states. `BuddyAvatar` accepts `nom`.
+- **Centralized Nom State Engine** `backend/nom_state.py` (`get_nom_state`) — layers: health_state (feeling check-in) > meaningful calorie-overage body state > time-aware calorie/protein/water pace > mood/macro props > general score. A mild overage starts at max(100 kcal, 5% of target); full/sleepy starts at max(225 kcal, 12%). Returns facialExpression / bodyState / accessories / animation / headline / message / priority / widgetState / legacyState plus optional `pace` diagnostics. `nutrition.buddy_state` wraps it; `summary.nom` + `summary.moods` exposed. Frontend `src/nom-state.ts` types it, `nomFromLegacy` supports static screens, and `withReaction` overlays log acknowledgments without overriding health/stuffed states. `BuddyAvatar` accepts `nom`.
 - **Daily feeling check-in** (Log tab, `src/mood-checkin.tsx`): 15 quick-select states (`backend/mood.py MOOD_OPTIONS`) + free text → keyword/synonym mapping first, GPT-5.4-mini fallback (allowed ids only). Collection `mood_checkins {user_id, date, states, text, interpreted, method}` unique per day; resets daily; `GET /mood/history` returns items + counts for future pattern features. `POST /mood/checkin`, `GET /mood/today`, `DELETE /mood/today`. Not a diagnosis (copy + Terms say so).
 - **Nom visuals**: new expressions (sick w/ flushed cheeks + lids, tired, stressed w/ sweat + wavy mouth, sore squint, hungry drool, stuffed, energetic) in `buddy-face.tsx`; accessories thermometer, blanket, ice pack, pillow, zzz, bandage, rain cloud, food cue, sun, sparkles, water drop, protein; animations idle/slow_idle/bounce/celebrate/shiver/jitter/stiff.
 - **Body-aware clothing**: `src/nom-rig.ts` (anchors per shape × body state: shoulders, torso, waist, belly, hips, feet, hat offset; widths normal 64 / full 74 / bloated 70 / slim 57) + `src/nom-outfit.tsx` (single renderer for all 10 outfits with neckline scoop, under-arm shading, belly stretch highlight, anchors for straps/ties/badges/belts). Hats, glasses, scarf/headphones/backpack/headbands, shoes and shape details all follow rig width. `buddy-extras.tsx` no longer draws outfits.

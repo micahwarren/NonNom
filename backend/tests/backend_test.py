@@ -202,8 +202,8 @@ def test_buddy_state_needs_protein_for_low_scoring_day(api_client, test_user):
     assert state in ("needs_protein", "tired")
 
 
-# buddy happy/celebrating state when calorie+protein targets are met
-def test_buddy_state_celebrating_when_targets_hit(api_client, test_user):
+# buddy recognizes a full-day target reached early without treating it as end-of-day completion
+def test_buddy_state_full_target_early_is_ahead_of_pace(api_client, test_user):
     target_update = {
         "targets": {
             "calories": 1000,
@@ -234,5 +234,6 @@ def test_buddy_state_celebrating_when_targets_hit(api_client, test_user):
     summary = api_client.get(f"{API}/summary/today", headers=headers, timeout=30)
     assert summary.status_code == 200
     buddy = summary.json()["buddy"]
-    assert buddy["state"] == "celebrating"
-    assert buddy["headline"] == "Nailed it"
+    assert buddy["state"] in ("neutral", "doing_well")
+    assert buddy["headline"] == "Plenty fueled for now..."
+    assert buddy["nom"]["pace"]["calories"]["status"] == "ahead"

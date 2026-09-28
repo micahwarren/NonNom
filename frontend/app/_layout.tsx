@@ -53,7 +53,7 @@ function RouterGate() {
     const inAuth = segments[0] === "(auth)";
     const inOnboarding = segments[0] === "onboarding";
     const inLegal = segments[0] === "legal-update" || segments[0] === "legal";
-    if (!user && !inAuth) router.replace("/(auth)/login");
+    if (!user && !inAuth && !inLegal) router.replace("/(auth)/login");
     else if (user && user.legal?.update_required && !inLegal) router.replace("/legal-update");
     else if (user && !user.legal?.update_required && !user.onboarding_complete && !inOnboarding) router.replace("/onboarding");
     else if (user && !user.legal?.update_required && user.onboarding_complete && (inAuth || (inOnboarding && edit !== "1"))) router.replace("/(tabs)");

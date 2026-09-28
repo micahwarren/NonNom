@@ -119,9 +119,13 @@ def tz_dep(x_tz_offset: Optional[str] = Header(default=None)) -> int:
 
 
 # --- auth ----------------------------------------------------------------------
-def issue_token(user_id: str) -> str:
+def issue_token(user_id: str, auth_version: int = 0) -> str:
     now = now_utc()
-    return jwt.encode({"sub": user_id, "iat": now, "exp": now + timedelta(days=TOKEN_DAYS)}, JWT_SECRET, algorithm=JWT_ALGO)
+    return jwt.encode({"sub": user_id, "av": auth_version, "iat": now, "exp": now + timedelta(days=TOKEN_DAYS)}, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def demo_account_disabled(user: dict) -> bool:
+    return (user.get("email") == "demo@nomnom.app" or user.get("is_demo_account") is True) and os.getenv("ENABLE_DEMO_ACCOUNT", "false").lower() != "true"
 
 
 async def current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(bearer)):
@@ -133,9 +137,10 @@ async def current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(b
         user = await db().users.find_one({"_id": ObjectId(payload["sub"])})
     except (InvalidTokenError, TypeError, ValueError, KeyError):
         raise unauth
-    if not user:
+    if not user or demo_account_disabled(user) or payload.get("av", 0) != user.get("auth_version", 0):
         raise unauth
-    return user
+    from subscriptions import refresh_subscription
+    return await refresh_subscription(user, db())
 
 
 def oid(value: str, what: str = "id") -> ObjectId:
@@ -146,7 +151,8 @@ def oid(value: str, what: str = "id") -> ObjectId:
 
 
 def is_premium(user: dict) -> bool:
-    return user.get("plan") == "premium"
+    from subscriptions import verified_premium
+    return verified_premium(user)
 
 
 # --- AI usage tracking ---------------------------------------------------------

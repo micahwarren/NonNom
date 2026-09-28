@@ -13,8 +13,8 @@ export default function Login() {
   const { colors, styles } = useThemeStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("demo@nomnom.app");
-  const [password, setPassword] = useState("DemoPass123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -52,6 +52,12 @@ export default function Login() {
             placeholder="••••••••" placeholderTextColor={colors.muted}
           />
         </View>
+
+        <Link href="/(auth)/forgot-password" asChild>
+          <Pressable testID="forgot-password-link" accessibilityRole="link" style={{ minHeight: 44, justifyContent: "center" }}>
+            <Text style={styles.link}>Forgot password?</Text>
+          </Pressable>
+        </Link>
 
         {err && <Text style={styles.err} testID="login-error">{err}</Text>}
 

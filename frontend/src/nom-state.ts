@@ -10,6 +10,7 @@ export type NomAccessory = "thermometer" | "blanket" | "ice_pack" | "pillow" | "
 export type NomState = {
   facialExpression: NomExpression; bodyState: NomBody; accessories: NomAccessory[]; animation: NomAnimation;
   headline: string; message: string; priority: string; widgetState: string; moods: string[]; legacyState: BuddyState; voiceLines?: string[];
+  pace?: { calories: { status: "behind" | "on_track" | "ahead"; expected: number }; protein: { status: "behind" | "on_track" | "ahead"; expected: number }; water: { status: "behind" | "on_track" | "ahead"; expected: number }; lateDay: boolean };
 };
 
 const LEGACY: Record<BuddyState, Partial<NomState>> = {
@@ -29,10 +30,12 @@ export function nomFromLegacy(state: BuddyState = "neutral"): NomState {
 
 /** Overlay a transient log reaction. Health/body layers stay visible; only the face and pace change briefly. */
 export function withReaction(nom: NomState, event: BuddyReaction | null): NomState {
-  if (!event || nom.bodyState === "full" || nom.priority === "health_state") return nom;
+  if (!event || nom.facialExpression === "stuffed" || nom.priority === "health_state") return nom;
   if (event.direction === "improved") return { ...nom, facialExpression: "joyful", animation: "celebrate", accessories: Array.from(new Set([...nom.accessories, "sparkles" as NomAccessory])) };
   if (event.direction === "worsened") return { ...nom, facialExpression: "sad", animation: "slow_idle" };
-  return nom;
+  // Even a neutral/noted log gets a small visual acknowledgment so every check-in feels responsive
+  // without turning tiny changes into a positive/negative judgment.
+  return { ...nom, animation: "bounce" };
 }
 
 export const EXPRESSION_LABEL: Record<NomExpression, string> = {

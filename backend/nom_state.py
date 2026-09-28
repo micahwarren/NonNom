@@ -3,9 +3,9 @@
 Every place Nom appears (Buddy screen, log reactions, widgets, history labels) derives its look from `get_nom_state`.
 Layers are resolved in priority order so visuals never conflict:
   1. health_state   — today's feeling check-in (sick, tired, sore, stressed ...)
-  2. body_state     — food intake vs. calorie goal (full / hungry) and bloated/full/hungry moods
-  3. hydration/macro— water and protein progress
-  4. general        — nutrition-score reaction
+  2. body_state     — meaningful calorie overages / hunger and bloated/full/hungry moods
+  3. hydration/macro— time-aware water and protein pace
+  4. general        — time-aware daily pace / late-day completion
 Accessories accumulate across layers (e.g. sick + tired → thermometer + pillow + sleepy eyes + slow idle).
 To add a mood: add a row to mood.MOOD_OPTIONS and a rule in MOOD_RULES below.
 """
@@ -78,15 +78,56 @@ _LEGACY = {"sick": "tired", "tired": "tired", "sad": "tired", "sore": "tired", "
            "hungry": "neutral", "thirsty": "needs_hydration", "energetic": "excellent", "joyful": "celebrating", "happy": "doing_well", "neutral": "neutral"}
 
 
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def expected_day_fraction(hour: int, *, start_hour: float = 7.0, end_hour: float = 21.0, floor: float = 0.08) -> float:
+    """How much of a daily target is reasonable to have completed by this time.
+
+    We intentionally model an eating/hydration window instead of midnight-to-midnight so breakfast is not judged
+    against a full day's target. The half-hour midpoint keeps the curve smooth enough for hourly summaries.
+    """
+    midpoint = float(hour) + 0.5
+    if midpoint <= start_hour:
+        return floor
+    if midpoint >= end_hour:
+        return 1.0
+    return _clamp((midpoint - start_hour) / max(end_hour - start_hour, 1.0), floor, 1.0)
+
+
+def _pace(consumed: float, goal: float, hour: int, *, start_hour: float = 7.0, end_hour: float = 21.0,
+          floor: float = 0.08, goal_tolerance: float = 0.06, expected_tolerance: float = 0.25) -> dict:
+    fraction = expected_day_fraction(hour, start_hour=start_hour, end_hour=end_hour, floor=floor)
+    expected = max(0.0, goal * fraction)
+    tolerance = max(goal * goal_tolerance, expected * expected_tolerance)
+    delta = consumed - expected
+    if delta < -tolerance:
+        status = "behind"
+    elif delta > tolerance:
+        status = "ahead"
+    else:
+        status = "on_track"
+    return {"fraction": fraction, "expected": expected, "delta": delta, "tolerance": tolerance, "status": status}
+
+
 def get_nom_state(*, moods: list[str], calories_consumed: float, calorie_goal: float, protein_consumed: float, protein_goal: float,
                   carbs_consumed: float = 0, carbs_goal: float = 1, fat_consumed: float = 0, fat_goal: float = 1,
                   water_consumed: float, water_goal: float, entries: int, hour: int, calories_burned: float = 0,
                   nutrition_score: int = 0, nom_name: str = "Nom") -> dict:
     moods = [m for m in moods if m in MOOD_RULES]
-    intake_over = calories_consumed - calorie_goal
+    net_calories = max(0.0, calories_consumed - calories_burned)
+    intake_over = net_calories - calorie_goal
     cal_left = calorie_goal - calories_consumed + calories_burned
     protein_left = protein_goal - protein_consumed
     water_pct = water_consumed / max(water_goal, 1)
+
+    calorie_pace = _pace(net_calories, calorie_goal, hour, start_hour=7, end_hour=21, floor=0.08, goal_tolerance=0.06, expected_tolerance=0.28)
+    protein_pace = _pace(protein_consumed, protein_goal, hour, start_hour=7, end_hour=21, floor=0.06, goal_tolerance=0.10, expected_tolerance=0.30)
+    water_pace = _pace(water_consumed, water_goal, hour, start_hour=6, end_hour=22, floor=0.08, goal_tolerance=0.12, expected_tolerance=0.35)
+    mild_over = max(100.0, calorie_goal * 0.05)
+    sleepy_over = max(225.0, calorie_goal * 0.12)
+    late_day = hour >= 20
 
     expression, animation, body, priority = None, "idle", "normal", "general"
     accessories: list[str] = []
@@ -104,15 +145,25 @@ def get_nom_state(*, moods: list[str], calories_consumed: float, calorie_goal: f
         headline = {"sick": "Not feeling great...", "headache": "Head's pounding...", "low_energy": "Running on low...", "sore": "A little achy...",
                     "stressed": "Feeling the pressure...", "anxious": "A bit on edge...", "sad": "Feeling down...", "unmotivated": "Slow start..."}[top["id"]]
 
-    # 2. body layer (tummy shape). Food intake over goal wins over a bloated/full mood; hungry mood or a light day → slim.
+    # 2. body layer. Small overages are tolerated; only a clearly larger overage becomes sleepy/full.
     body_moods = [r for r in active if r["layer"] == "body_state"]
-    if entries > 0 and intake_over >= 100:
+    if entries > 0 and intake_over >= sleepy_over:
         body = "full"
         if "zzz" not in accessories:
             accessories.append("zzz")
         if expression is None:
             expression, animation, priority = "stuffed", "slow_idle", "body_state"
-            headline, message = "Feeling full and sleepy...", f"Your food log is {int(intake_over)} kcal above today's intake target. {nom_name} is taking a rest. This is a reaction to your log, not a change in your body or weight."
+            headline, message = "Feeling full and sleepy...", (
+                f"Your log is about {int(round(intake_over))} kcal above today's target. {nom_name} is taking a rest. "
+                "This is only a reaction to today's log, not a judgment or a change in your body or weight."
+            )
+    elif entries > 0 and intake_over >= mild_over:
+        body = "full"
+        if expression is None:
+            expression, animation, priority = "neutral", "slow_idle", "body_state"
+            headline, message = "A little full...", (
+                f"You're about {int(round(intake_over))} kcal above today's target. That's a small part of one day, so no need to overcorrect."
+            )
     elif body_moods:
         top = body_moods[0]
         body = top["body"]
@@ -121,26 +172,43 @@ def get_nom_state(*, moods: list[str], calories_consumed: float, calorie_goal: f
             expression, animation, priority = top["expression"], top["animation"], "body_state"
             headline = {"bloated": "Feeling bloated...", "full": "Pretty full...", "hungry": "Getting hungry..."}[top["id"]]
             message = MOOD_MESSAGES[top["id"]]
-    elif entries > 0 and hour >= 18 and calories_consumed < calorie_goal * 0.4:
-        body = "slim"
-        if expression is None:
+    elif entries > 0 and hour >= 14 and calorie_pace["status"] == "behind":
+        # Don't make breakfast look like a bad day. Hunger only starts to matter once enough of the day has passed.
+        if late_day or net_calories < calorie_goal * 0.55:
+            body = "slim"
+        if expression is None and (hour >= 18 or calorie_pace["delta"] < -calorie_goal * 0.18):
             expression, priority = "hungry", "body_state"
-            accessories.append("food_cue")
-            headline, message = "Running a bit light...", f"You've eaten well under your target so far. A real meal would do {nom_name} good."
+            if "food_cue" not in accessories:
+                accessories.append("food_cue")
+            expected = int(round(calorie_pace["expected"]))
+            headline, message = "A little behind pace...", (
+                f"Around this time, roughly {expected} kcal would put you near your usual daily pace. "
+                f"You're at {int(round(net_calories))}, and there's still time for a meal or snack."
+            )
 
-    # 3. hydration / macro layer (props; face only if nothing above claimed it)
-    if entries > 0 and water_pct < 0.4 and hour >= 14:
-        accessories.append("water_drop")
+    # 3. hydration / protein use time-of-day pace rather than full-day completion.
+    if (entries > 0 or water_consumed > 0) and hour >= 12 and water_pace["status"] == "behind":
+        if "water_drop" not in accessories:
+            accessories.append("water_drop")
         if expression is None:
             expression, priority = "thirsty", "hydration_state"
-            headline, message = "Time for water!", f"You're at {int(water_pct * 100)}% of your water goal. A glass now would help."
-    if entries > 0 and protein_left > 40 and hour >= 15:
-        accessories.append("protein")
+            expected = int(round(water_pace["expected"]))
+            headline, message = "Time for water!", (
+                f"You're at {int(water_consumed)} mL. Around {expected} mL would keep you near pace right now, "
+                "so a cup of water would help."
+            )
+    if entries > 0 and hour >= 13 and protein_pace["status"] == "behind":
+        if "protein" not in accessories:
+            accessories.append("protein")
         if expression is None:
             expression, priority = "neutral", "macro_state"
-            headline, message = "A little low on protein...", f"You still need {int(protein_left)}g of protein. A high-protein snack would fit well."
+            expected = int(round(protein_pace["expected"]))
+            headline, message = "A little low on protein...", (
+                f"You're at {int(round(protein_consumed))}g. Around {expected}g would keep you near pace at this point, "
+                "and there's still time to catch up with your next meal or snack."
+            )
 
-    # 4. general layer
+    # 4. general layer. During the day, judge pace; near the end of the day, judge the completed day.
     positive = [r for r in active if r["layer"] == "general"]
     if expression is None:
         if entries == 0:
@@ -151,23 +219,49 @@ def get_nom_state(*, moods: list[str], calories_consumed: float, calorie_goal: f
                 headline, message = "Ready when you are!", MOOD_MESSAGES[top["id"]]
             else:
                 expression, headline, message = "neutral", "Ready when you are...", f"Log your first meal and {nom_name} will start tracking your day."
-        elif abs(cal_left) <= calorie_goal * 0.1 and protein_left <= 0:
-            expression, animation, headline, message = "joyful", "celebrate", "Nailed it!", "You hit your calorie range and your protein target. Great day."
-            accessories.append("sparkles")
-        elif nutrition_score >= 80:
-            expression, animation, headline = "joyful", "bounce", "Doing great!"
-        elif nutrition_score >= 60:
-            expression, animation, headline = "happy", "bounce", "Solid day so far!"
-        elif nutrition_score >= 40:
-            expression, headline = "neutral", "Almost there..."
-        else:
-            expression, headline = "tired", "Let's finish strong!"
+        elif late_day:
+            within_cal_range = abs(cal_left) <= calorie_goal * 0.10
+            protein_close = protein_consumed >= protein_goal * 0.90
+            water_close = water_consumed >= water_goal * 0.85
+            if within_cal_range and protein_close and water_close:
+                expression, animation, headline, message = "joyful", "celebrate", "Day complete!", "You finished the day in a solid range for calories, protein, and water. Nice consistency."
+                accessories.append("sparkles")
+            elif within_cal_range and protein_close:
+                expression, animation, headline, message = "happy", "bounce", "Solid finish!", _left_sentence(cal_left, protein_left)
+            elif calorie_pace["status"] == "behind":
+                expression, headline = "neutral", "Still room to refuel..."
+                message = f"You have about {max(0, int(round(cal_left)))} kcal left today. If you're hungry, a balanced meal or snack can help close the gap."
+            else:
+                expression, headline, message = "neutral", "Day logged...", _left_sentence(cal_left, protein_left)
+        elif calorie_pace["status"] == "ahead":
+            expression, headline = "neutral", "Plenty fueled for now..."
+            message = (
+                f"You're ahead of your usual calorie pace for this time of day, but still within today's overall target. "
+                "You don't need to rush toward the full-day goal."
+            )
+        elif calorie_pace["status"] == "on_track":
+            protein_ok = protein_pace["status"] != "behind" or hour < 13
+            water_ok = water_pace["status"] != "behind" or hour < 12
+            if protein_ok and water_ok:
+                expression, animation, headline = "happy", "bounce", "Right on pace!"
+                message = "Your calories, protein, and hydration are in a reasonable range for this point in the day."
+            else:
+                expression, headline, message = "neutral", "On track so far...", "Your calorie pace looks good. Keep building the rest of the day one meal and drink at a time."
+        else:  # behind, but not enough to trigger hunger above
+            expression = "neutral" if hour < 15 else "tired"
+            animation = "idle" if hour < 15 else "slow_idle"
+            headline = "Good start!" if hour < 13 else "A little behind pace..."
+            message = (
+                "You don't need to have the whole day's calories eaten yet. "
+                "Keep logging normally and your target pace will adjust as the day goes on."
+            )
         if positive and expression in ("neutral", "tired", "happy"):
             top = positive[0]
-            expression, animation = top["expression"], top["animation"]
+            # Positive self-reported mood can brighten Nom without hiding health/body warnings.
+            if priority == "general":
+                expression, animation = top["expression"], top["animation"]
             accessories += [a for a in top["accessories"] if a not in accessories]
-        message = message or _left_sentence(cal_left, protein_left)
-    elif positive:  # positive mood alongside a higher-priority state still adds its accessories
+    elif positive:
         for r in positive:
             accessories += [a for a in r["accessories"] if a not in accessories]
 
@@ -177,17 +271,28 @@ def get_nom_state(*, moods: list[str], calories_consumed: float, calorie_goal: f
         lines += VOICE_LINES.get(m, [])
     if not lines:
         lines = VOICE_LINES.get(expression) or VOICE_LINES["neutral"]
+    legacy_state = _LEGACY.get(expression, "neutral")
+    if priority == "hydration_state":
+        legacy_state = "needs_hydration"
+    elif priority == "macro_state":
+        legacy_state = "needs_protein"
     return {
         "facialExpression": expression, "bodyState": body, "accessories": accessories, "animation": animation,
         "headline": headline, "message": message, "priority": priority, "widgetState": widget_state, "moods": moods,
-        "legacyState": _LEGACY.get(expression, "neutral"), "voiceLines": lines,
+        "legacyState": legacy_state, "voiceLines": lines,
+        "pace": {
+            "calories": {"status": calorie_pace["status"], "expected": int(round(calorie_pace["expected"]))},
+            "protein": {"status": protein_pace["status"], "expected": int(round(protein_pace["expected"]))},
+            "water": {"status": water_pace["status"], "expected": int(round(water_pace["expected"]))},
+            "lateDay": late_day,
+        },
     }
 
 
 def _left_sentence(cal_left: float, protein_left: float) -> str:
-    cal_left, p = int(cal_left), int(protein_left)
+    cal_left, p = int(round(cal_left)), int(round(protein_left))
     if cal_left < 0:
-        return f"You're {abs(cal_left)} kcal over your target today. Tomorrow is a fresh start."
+        return f"You're {abs(cal_left)} kcal over your target today. One day doesn't define your progress."
     if p <= 0:
         return f"You've hit your protein goal and have {cal_left} calories left."
-    return f"You have {cal_left} calories left and still need {p}g of protein."
+    return f"You have {cal_left} calories left and still need about {p}g of protein."

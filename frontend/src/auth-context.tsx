@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (inFlight.current?.id === account.id) {
       if (!purchase) return inFlight.current.promise;
       // A purchase result is newer than an already-running free snapshot.
-      // Finish that write, then explicitly mirror the returned SDK entitlement.
+      // Finish that request, then force a fresh server verification after purchase/restore.
       await inFlight.current.promise.catch(() => {});
       if (userRef.current?.id !== account.id) throw new ApiError(409, "Your account changed. Please try again.");
     }
@@ -59,18 +59,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error("Your account changed. Please try again.");
         }
         binding.current = account.id;
-        const premium = !!info.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER];
-        // A resolved SDK snapshot, not cached UI flags, determines the mirror.
-        const synced = await api.syncEntitlement(premium);
-        if (userRef.current?.id !== account.id) return;
+        // Only RevenueCat's server response can grant paid access.
+        const synced = await api.syncEntitlement(!!purchase);
+        if (userRef.current?.id !== account.id) throw new ApiError(409, "Your account changed. Please restore purchases for the current account.");
         await updateIdentity(account.id, info);
         setUser(synced);
         setPurchaseIdentityError(null);
-        if (__DEV__) console.info("[RevenueCat] entitlement mirrored", { appUserId: account.id, premium, serverPlan: synced.plan });
+        if (purchase && info.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER] && synced.plan !== "premium") {
+          throw new Error("Your purchase is still being verified. Please use Restore Purchases in a moment.");
+        }
+        if (__DEV__) console.info("[RevenueCat] entitlement verified", { appUserId: account.id, serverPlan: synced.plan });
       } catch (error) {
         if (__DEV__) console.warn("[RevenueCat] account sync failed", error instanceof Error ? error.message : String(error));
         if (userRef.current?.id === account.id) setPurchaseIdentityError(String(error));
-        throw new ApiError(503, "Couldn't confirm your subscription right now. Please try again; your Premium access has not been changed.");
+        if (error instanceof ApiError && error.status !== 503 && error.status !== 0) throw error;
+        throw new ApiError(503, "Couldn't confirm your subscription right now. If you already purchased, wait a moment and use Restore Purchases. You don't need to buy again.");
       }
     })();
     inFlight.current = { id: account.id, promise };

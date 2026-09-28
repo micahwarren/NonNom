@@ -2,7 +2,7 @@
 from datetime import date, timedelta
 from typing import Optional
 
-from core import db, day_bounds, local_today, local_now, now_utc
+from core import db, day_bounds, local_today, local_now, now_utc, is_premium
 from nom_state import get_nom_state
 
 # --- default targets -----------------------------------------------------------
@@ -138,8 +138,12 @@ async def moods_for_day(user: dict, day: date) -> list[str]:
 def day_label(summary: dict, t: dict) -> str:
     if summary["entries"] == 0:
         return "No entries"
-    if summary["calories_in"] - t["calories"] >= 100:
+    net = max(0.0, summary["calories_in"] - summary.get("calories_burned", 0))
+    over = net - t["calories"]
+    if over >= max(225.0, t["calories"] * 0.12):
         return "Full & Sleepy"
+    if over >= max(100.0, t["calories"] * 0.05):
+        return "A Little Full"
     s = summary["nutrition_score"]
     if s >= 80:
         return "Nailed It"
@@ -403,7 +407,7 @@ def cosmetic_available(c: dict, user: dict) -> bool:
     if c["unlock_type"] == "free":
         return True
     if c["unlock_type"] == "premium":
-        return user.get("plan") == "premium"
+        return is_premium(user)
     return c["id"] in (user.get("unlocked_cosmetics") or [])
 
 

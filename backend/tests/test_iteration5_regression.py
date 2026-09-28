@@ -243,7 +243,7 @@ def test_reactions_emitted_unique_ids_and_failures_no_reaction(api_client):
         _delete_account(api_client, headers)
 
 
-# Full-state boundary: +99.9 not full; +100 full; deleting food reverses below threshold.
+# Sleepy/full boundary uses a meaningful tolerance: +224.9 is not sleepy; +225 is sleepy for a 1000 kcal target.
 def test_full_state_boundary_and_reversal(api_client):
     temp = _create_temp_user(api_client, "iter5_full")
     headers = temp["headers"]
@@ -259,7 +259,7 @@ def test_full_state_boundary_and_reversal(api_client):
         f1 = api_client.post(
             f"{API}/food",
             headers=headers,
-            json={"name": "TEST_full_1099_9", "calories": 1099.9, "protein_g": 40, "carbs_g": 120, "fat_g": 30, "meal": "dinner", "source": "manual", "data_source": "user"},
+            json={"name": "TEST_full_1224_9", "calories": 1224.9, "protein_g": 40, "carbs_g": 120, "fat_g": 30, "meal": "dinner", "source": "manual", "data_source": "user"},
             timeout=40,
         )
         assert f1.status_code == 201, f1.text

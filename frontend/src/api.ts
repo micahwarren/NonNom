@@ -76,8 +76,14 @@ export class ApiError extends Error {
 }
 
 async function request<T = any>(path: string, init: RequestInit = {}): Promise<T> {
-  // Never race a paid request against the background RevenueCat-to-server mirror.
-  if (needsEntitlement(path) && entitlementSync) await entitlementSync();
+  // Finish subscription verification before starting a gated request.
+  if (needsEntitlement(path) && entitlementSync) {
+    try { await entitlementSync(); }
+    catch (error) {
+      // The server independently verifies access. A billing outage must not block free features.
+      if (!(error instanceof ApiError) || error.status !== 503) throw error;
+    }
+  }
   const token = await getToken();
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -106,6 +112,8 @@ const json = (body: unknown) => JSON.stringify(body);
 export const api = {
   signup: (email: string, password: string, name: string, invite_code?: string) => request<{ access_token: string; user: PublicUser }>("/auth/signup", { method: "POST", body: json({ email, password, name, invite_code: invite_code || undefined, accept_terms: true }) }),
   login: (email: string, password: string) => request<{ access_token: string; user: PublicUser }>("/auth/login", { method: "POST", body: json({ email, password }) }),
+  forgotPassword: (email: string) => request<{ message: string }>("/auth/forgot-password", { method: "POST", body: json({ email }) }),
+  resetPassword: (email: string, code: string, password: string) => request<{ message: string }>("/auth/reset-password", { method: "POST", body: json({ email, code, password }) }),
   me: () => request<PublicUser>("/auth/me"),
   usage: () => request<Record<string, { used: number; limit: number | null }>>("/me/usage"),
   updateMe: (payload: { name?: string; username?: string; nom_name?: string; profile?: Profile; targets?: Partial<Targets>; auto_macros?: boolean }) => request<PublicUser>("/me", { method: "PATCH", body: json(payload) }),
@@ -113,7 +121,7 @@ export const api = {
   previewTargets: (profile: Profile, calories?: number) => request<TargetPreview>("/me/targets/preview", { method: "POST", body: json({ ...profile, calories }) }),
   updateNotifications: (prefs: Record<string, boolean>) => request<Record<string, boolean>>("/me/notifications", { method: "PATCH", body: json(prefs) }),
   updatePrivacy: (prefs: Record<string, boolean>) => request<Record<string, boolean>>("/me/privacy", { method: "PATCH", body: json(prefs) }),
-  syncEntitlement: (premium: boolean) => request<PublicUser>("/me/entitlement", { method: "POST", body: json({ premium, source: "revenuecat" }) }),
+  syncEntitlement: (force = false) => request<PublicUser>("/me/entitlement", { method: "POST", body: json({ force }) }),
   deleteAccount: () => request("/me", { method: "DELETE" }),
   legalDoc: (doc: "terms" | "privacy") => request<LegalDoc>(`/legal/${doc}`),
   acceptLegal: () => request<LegalStatus>("/me/legal/accept", { method: "POST" }),

@@ -183,17 +183,66 @@ function Nutri({ label, v, color, big }: { label: string; v: string; color?: str
 }
 
 // --- Confirm AI-detected items before logging -----------------------------------
+type ConfirmAiItem = AiItem & { qty: string };
+type AiEditDraft = { name: string; serving: string; qty: string; calories: string; protein: string; carbs: string; fat: string };
+
+const EMPTY_AI_DRAFT: AiEditDraft = { name: "", serving: "1 serving", qty: "1", calories: "", protein: "", carbs: "", fat: "" };
+
 export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, scanId, onDone, onCancel, source }: { items: AiItem[]; meal: Meal; imagePath?: string | null; scanId?: string; onDone: () => void; onCancel: () => void | Promise<void>; source: "photo" | "describe" }) {
   const { colors, styles: s } = useThemeStyles(createStyles);
   const toast = useToast();
   const router = useRouter();
-  const [items, setItems] = useState(initial.map(i => ({ ...i, qty: "1" })));
+  const [items, setItems] = useState<ConfirmAiItem[]>(initial.map(i => ({ ...i, qty: String(i.quantity || 1) })));
   const [meal, setMeal] = useState<Meal>(initialMeal);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [newName, setNewName] = useState(""); const [newCal, setNewCal] = useState("");
+  const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [draft, setDraft] = useState<AiEditDraft>(EMPTY_AI_DRAFT);
+  const [newName, setNewName] = useState("");
+  const [newCal, setNewCal] = useState("");
+  const [newProtein, setNewProtein] = useState("");
+  const [newCarbs, setNewCarbs] = useState("");
+  const [newFat, setNewFat] = useState("");
   const totals = items.reduce((a, i) => { const q = parseFloat(i.qty) || 0; return { cal: a.cal + i.calories * q, p: a.p + i.protein_g * q, c: a.c + i.carbs_g * q, f: a.f + i.fat_g * q }; }, { cal: 0, p: 0, c: 0, f: 0 });
+
+  function openEdit(idx: number) {
+    const item = items[idx];
+    setEditIndex(idx);
+    setDraft({
+      name: item.name,
+      serving: item.serving_label,
+      qty: item.qty,
+      calories: String(item.calories),
+      protein: String(item.protein_g),
+      carbs: String(item.carbs_g),
+      fat: String(item.fat_g),
+    });
+  }
+
+  function saveEdit() {
+    if (editIndex == null) return;
+    const qty = Number(draft.qty);
+    const calories = Number(draft.calories);
+    const protein = Number(draft.protein);
+    const carbs = Number(draft.carbs);
+    const fat = Number(draft.fat);
+    if (!draft.name.trim() || !draft.serving.trim()) return toast.show("Add a food name and serving size.", { icon: "alert-circle" });
+    if (![qty, calories, protein, carbs, fat].every(Number.isFinite) || qty <= 0 || calories < 0 || protein < 0 || carbs < 0 || fat < 0) {
+      return toast.show("Use valid non-negative nutrition values and a serving amount above zero.", { icon: "alert-circle" });
+    }
+    setItems(current => current.map((item, idx) => idx === editIndex ? {
+      ...item,
+      name: draft.name.trim(),
+      serving_label: draft.serving.trim(),
+      qty: String(qty),
+      calories,
+      protein_g: protein,
+      carbs_g: carbs,
+      fat_g: fat,
+    } : item));
+    setEditIndex(null);
+  }
 
   async function save() {
     if (!items.length) return;
@@ -216,16 +265,29 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, sca
     finally { setCancelling(false); }
   }
 
+  function addMissedItem() {
+    if (!newName.trim()) return;
+    const calories = Math.max(0, Number(newCal) || 0);
+    const protein = Math.max(0, Number(newProtein) || 0);
+    const carbs = Math.max(0, Number(newCarbs) || 0);
+    const fat = Math.max(0, Number(newFat) || 0);
+    setItems(a => [...a, { name: newName.trim(), serving_label: "1 serving", calories, protein_g: protein, carbs_g: carbs, fat_g: fat, quantity: 1, data_source: "ai_estimate", qty: "1" }]);
+    setNewName(""); setNewCal(""); setNewProtein(""); setNewCarbs(""); setNewFat(""); setAdding(false);
+  }
+
   return (
     <View style={{ gap: spacing.md }}>
-      <View style={s.estimateBanner}><Icon name="sparkles" size={14} color={colors.protein} /><Text style={s.estimateText}>These are AI estimates. Adjust portions before logging.</Text></View>
+      <View style={s.estimateBanner}><Icon name="sparkles" size={14} color={colors.protein} /><Text style={s.estimateText}>AI estimates can be wrong. Review foods, serving sizes, calories, and macros before logging.</Text></View>
       {items.map((it, idx) => (
         <View key={idx} style={s.aiRow} testID={`ai-item-${idx}`}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={s.rowName}>{it.name}</Text>
-            <Text style={s.rowServing}>{it.serving_label} · {Math.round(it.calories * (parseFloat(it.qty) || 0))} kcal</Text>
+          <Pressable style={{ flex: 1, gap: 2 }} onPress={() => openEdit(idx)} accessibilityRole="button" accessibilityLabel={`Edit ${it.name}`} testID={`ai-edit-${idx}`}>
+            <View style={s.aiNameRow}>
+              <Text style={s.rowName} numberOfLines={1}>{it.name}</Text>
+              <Icon name="create-outline" size={15} color={colors.brandPrimary} />
+            </View>
+            <Text style={s.rowServing}>{it.qty !== "1" ? `${it.qty} × ` : ""}{it.serving_label} · {Math.round(it.calories * (parseFloat(it.qty) || 0))} kcal</Text>
             <MacroLine p={it.protein_g * (parseFloat(it.qty) || 0)} c={it.carbs_g * (parseFloat(it.qty) || 0)} f={it.fat_g * (parseFloat(it.qty) || 0)} />
-          </View>
+          </Pressable>
           <View style={s.qtyBox}>
             <Pressable onPress={() => setItems(a => a.map((x, i) => i === idx ? { ...x, qty: String(Math.max(0.25, (parseFloat(x.qty) || 1) - 0.25)) } : x))} style={s.qtyBtn} accessibilityLabel="Decrease"><Icon name="remove" size={16} /></Pressable>
             <Text style={s.qtyText}>{it.qty}×</Text>
@@ -235,13 +297,16 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, sca
         </View>
       ))}
       {adding ? (
-        <View style={{ gap: spacing.sm }}>
-          <View style={{ flexDirection: "row", gap: spacing.sm }}>
-            <View style={{ flex: 2 }}><Field placeholder="Food name" value={newName} onChangeText={setNewName} testID="ai-new-name" /></View>
-            <View style={{ flex: 1 }}><Field placeholder="kcal" value={newCal} onChangeText={setNewCal} keyboardType="number-pad" testID="ai-new-cal" /></View>
+        <View style={s.addEditor}>
+          <Field label="Food" placeholder="Food name" value={newName} onChangeText={setNewName} testID="ai-new-name" />
+          <View style={s.editGrid}>
+            <View style={s.editCell}><Field label="Calories" placeholder="0" value={newCal} onChangeText={setNewCal} keyboardType="decimal-pad" testID="ai-new-cal" /></View>
+            <View style={s.editCell}><Field label="Protein (g)" placeholder="0" value={newProtein} onChangeText={setNewProtein} keyboardType="decimal-pad" testID="ai-new-protein" /></View>
+            <View style={s.editCell}><Field label="Carbs (g)" placeholder="0" value={newCarbs} onChangeText={setNewCarbs} keyboardType="decimal-pad" testID="ai-new-carbs" /></View>
+            <View style={s.editCell}><Field label="Fat (g)" placeholder="0" value={newFat} onChangeText={setNewFat} keyboardType="decimal-pad" testID="ai-new-fat" /></View>
           </View>
           <View style={{ flexDirection: "row", gap: spacing.sm }}>
-            <Button title="Add item" size="sm" onPress={() => { if (!newName.trim()) return; setItems(a => [...a, { name: newName.trim(), serving_label: "1 serving", calories: parseFloat(newCal) || 0, protein_g: 0, carbs_g: 0, fat_g: 0, quantity: 1, data_source: "ai_estimate", qty: "1" }]); setNewName(""); setNewCal(""); setAdding(false); }} style={{ flex: 1 }} />
+            <Button title="Add item" size="sm" onPress={addMissedItem} style={{ flex: 1 }} />
             <Button title="Cancel" size="sm" variant="ghost" onPress={() => setAdding(false)} style={{ flex: 1 }} />
           </View>
         </View>
@@ -258,6 +323,21 @@ export function ConfirmItems({ items: initial, meal: initialMeal, imagePath, sca
       <Button title={items.length ? `Add ${items.length} item${items.length > 1 ? "s" : ""}` : "Nothing to add"} onPress={save} loading={busy} disabled={!items.length || cancelling} size="lg" testID="ai-confirm-log" />
       <Button title={cancelling ? "Starting over…" : "Start over"} variant="ghost" onPress={() => startOver()} loading={cancelling} disabled={busy} testID="ai-start-over" />
       {!items.length && <Button title="Enter manually instead" variant="secondary" onPress={() => startOver(true)} disabled={busy || cancelling} testID="ai-manual-fallback" />}
+
+      <Sheet visible={editIndex != null} onClose={() => setEditIndex(null)} title="Edit AI estimate" testID="ai-edit-sheet">
+        <Text style={s.editHelp}>Correct anything the AI got wrong. Nutrition values below are per serving; the quantity multiplies them when you log.</Text>
+        <Field label="Food" value={draft.name} onChangeText={v => setDraft(d => ({ ...d, name: v }))} testID="ai-edit-name" />
+        <Field label="Serving size" value={draft.serving} onChangeText={v => setDraft(d => ({ ...d, serving: v }))} placeholder="e.g. 6 oz, 1 cup" testID="ai-edit-serving" />
+        <View style={s.editGrid}>
+          <View style={s.editCell}><Field label="Servings" value={draft.qty} onChangeText={v => setDraft(d => ({ ...d, qty: v }))} keyboardType="decimal-pad" testID="ai-edit-qty" /></View>
+          <View style={s.editCell}><Field label="Calories" value={draft.calories} onChangeText={v => setDraft(d => ({ ...d, calories: v }))} keyboardType="decimal-pad" testID="ai-edit-calories" /></View>
+          <View style={s.editCell}><Field label="Protein (g)" value={draft.protein} onChangeText={v => setDraft(d => ({ ...d, protein: v }))} keyboardType="decimal-pad" testID="ai-edit-protein" /></View>
+          <View style={s.editCell}><Field label="Carbs (g)" value={draft.carbs} onChangeText={v => setDraft(d => ({ ...d, carbs: v }))} keyboardType="decimal-pad" testID="ai-edit-carbs" /></View>
+          <View style={s.editCell}><Field label="Fat (g)" value={draft.fat} onChangeText={v => setDraft(d => ({ ...d, fat: v }))} keyboardType="decimal-pad" testID="ai-edit-fat" /></View>
+        </View>
+        <Button title="Save corrections" onPress={saveEdit} testID="ai-edit-save" style={{ marginTop: spacing.sm }} />
+        <Button title="Cancel" variant="ghost" onPress={() => setEditIndex(null)} />
+      </Sheet>
     </View>
   );
 }
@@ -286,11 +366,16 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   estimateBanner: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.protein + "14", padding: spacing.sm, borderRadius: radius.md },
   estimateText: { fontSize: fontSize.xs, fontWeight: "700", color: colors.protein, flex: 1 },
   aiRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
+  aiNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   qtyBox: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: colors.surface, borderRadius: radius.pill, paddingHorizontal: 2 },
   qtyBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   qtyText: { fontWeight: "800", fontSize: fontSize.sm, minWidth: 40, textAlign: "center", color: colors.onSurface },
   addMissed: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: spacing.sm, alignSelf: "flex-start" },
   addMissedText: { fontWeight: "700", color: colors.brandPrimary, fontSize: fontSize.sm },
+  addEditor: { gap: spacing.sm, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
+  editHelp: { fontSize: fontSize.xs, color: colors.textSecondary, lineHeight: 18, marginBottom: spacing.xs },
+  editGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  editCell: { minWidth: 135, flexGrow: 1, flexBasis: "45%" },
   totalCard: { backgroundColor: colors.surfaceTertiary, borderRadius: radius.lg, padding: spacing.lg, gap: 2 },
   totalLabel: { fontSize: fontSize.xs, fontWeight: "800", color: colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 },
   totalCal: { fontSize: fontSize.xxl, fontWeight: "800", color: colors.onSurface },

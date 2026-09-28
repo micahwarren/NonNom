@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-from core import db, current_user, issue_token, password_hash, now_utc, tz_dep, ai_usage_today, local_today
+from core import db, current_user, issue_token, password_hash, now_utc, tz_dep, ai_usage_today, local_today, is_premium, demo_account_disabled
 from nutrition import (DEFAULT_TARGETS, compute_targets, user_targets, equipped_for, effective_streak, freeze_status, nom_name_of)
 from legal_docs import TERMS_VERSION, PRIVACY_VERSION, acceptance_status
 from macro_targets import recommend_macros
@@ -73,14 +73,14 @@ class OnboardingIn(BaseModel):
 
 
 class EntitlementIn(BaseModel):
-    premium: bool
-    source: str = "revenuecat"
+    # Old clients may still submit premium/source; neither is used as evidence.
+    force: bool = False
 
 
 def new_user_doc(email: str, password: str, name: str) -> dict:
     base = re.sub(r"[^a-z0-9_]", "", email.split("@")[0].lower())[:14] or "buddy"
     return {
-        "email": email, "password_hash": password_hash.hash(password), "name": name,
+        "email": email, "password_hash": password_hash.hash(password), "name": name, "auth_version": 0,
         "username": f"{base}{int(now_utc().timestamp()) % 10000}",
         "created_at": now_utc(), "plan": "free", "entitlement_source": None,
         "onboarding_complete": False, "profile": {}, "targets": dict(DEFAULT_TARGETS),
@@ -94,7 +94,7 @@ def new_user_doc(email: str, password: str, name: str) -> dict:
 def public_user(doc: dict, tz: int = 0) -> dict:
     return {
         "id": str(doc["_id"]), "email": doc["email"], "name": doc.get("name", ""),
-        "username": doc.get("username", ""), "plan": doc.get("plan", "free"), "nom_name": nom_name_of(doc),
+        "username": doc.get("username", ""), "plan": "premium" if is_premium(doc) else "free", "nom_name": nom_name_of(doc),
         "legal": acceptance_status(doc),
         "onboarding_complete": bool(doc.get("onboarding_complete", False)),
         "profile": doc.get("profile") or {}, "targets": user_targets(doc),
@@ -116,6 +116,8 @@ async def signup(body: SignupIn, tz: int = Depends(tz_dep)):
     email = body.email.lower()
     if not body.accept_terms:
         raise HTTPException(400, "Please accept the Terms of Service and Privacy Policy to create an account.")
+    if email == "demo@nomnom.app":
+        raise HTTPException(400, "Please use your own email address.")
     if await db().users.find_one({"email": email}):
         raise HTTPException(409, "An account with this email already exists")
     doc = new_user_doc(email, body.password, body.name.strip())
@@ -132,9 +134,9 @@ async def signup(body: SignupIn, tz: int = Depends(tz_dep)):
 @router.post("/auth/login")
 async def login(body: LoginIn, tz: int = Depends(tz_dep)):
     user = await db().users.find_one({"email": body.email.lower()})
-    if not user or not password_hash.verify(body.password, user["password_hash"]):
+    if not user or demo_account_disabled(user) or not password_hash.verify(body.password, user["password_hash"]):
         raise HTTPException(401, "Invalid email or password")
-    return {"access_token": issue_token(str(user["_id"])), "token_type": "bearer", "user": public_user(user, tz)}
+    return {"access_token": issue_token(str(user["_id"]), user.get("auth_version", 0)), "token_type": "bearer", "user": public_user(user, tz)}
 
 
 @router.get("/auth/me")
@@ -257,12 +259,15 @@ async def update_privacy(body: dict, user=Depends(current_user)):
 
 @router.post("/me/entitlement")
 async def sync_entitlement(body: EntitlementIn, user=Depends(current_user), tz: int = Depends(tz_dep)):
-    """Mirror the RevenueCat entitlement (SDK is source of truth) so AI limits + cosmetics resolve server-side.
-    NOTE: server-side verification via RevenueCat webhooks can be layered on later; see README notes."""
-    plan = "premium" if body.premium else "free"
-    if user.get("plan") != plan:
-        await db().users.update_one({"_id": user["_id"]}, {"$set": {"plan": plan, "entitlement_source": body.source, "entitlement_synced_at": now_utc()}})
-    return public_user(await db().users.find_one({"_id": user["_id"]}), tz)
+    from subscriptions import refresh_subscription, VerificationUnavailable
+    from password_recovery import rate_limit
+    if body.force:
+        await rate_limit("subscription-refresh", str(user["_id"]), 30)
+    try:
+        verified = await refresh_subscription(user, db(), force=body.force, strict=True)
+    except VerificationUnavailable:
+        raise HTTPException(503, "Couldn't verify your subscription. Please try again shortly.")
+    return public_user(verified, tz)
 
 
 @router.delete("/me")
